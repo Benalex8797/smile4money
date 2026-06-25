@@ -561,6 +561,13 @@ impl EscrowContract {
         Ok(())
     }
 
+    /// Return the match_id that registered a given game_id, or None if unregistered.
+    pub fn get_game_id_owner(env: Env, game_id: String) -> Option<u64> {
+        env.storage()
+            .persistent()
+            .get(&DataKey::GameId(game_id))
+    }
+
     /// Read a match by ID.
     pub fn get_match(env: Env, match_id: u64) -> Result<Match, Error> {
         Self::validate_match_id(&env, match_id)?;
