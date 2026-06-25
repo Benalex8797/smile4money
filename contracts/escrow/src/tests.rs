@@ -2013,3 +2013,32 @@ fn test_emergency_drain_fails_for_non_admin() {
         Err(Ok(Error::Unauthorized))
     );
 }
+
+#[test]
+fn test_get_game_id_owner_returns_match_id() {
+    let (env, contract_id, _oracle, player1, player2, token, _admin) = setup();
+    let client = EscrowContractClient::new(&env, &contract_id);
+
+    let game_id = String::from_str(&env, "owner_lookup");
+    let id = client.create_match(
+        &player1,
+        &player2,
+        &100,
+        &token,
+        &game_id,
+        &Platform::Lichess,
+    );
+
+    assert_eq!(client.get_game_id_owner(&game_id), Some(id));
+}
+
+#[test]
+fn test_get_game_id_owner_returns_none_for_unknown() {
+    let (env, contract_id, ..) = setup();
+    let client = EscrowContractClient::new(&env, &contract_id);
+
+    assert_eq!(
+        client.get_game_id_owner(&String::from_str(&env, "no_such_game")),
+        None
+    );
+}
