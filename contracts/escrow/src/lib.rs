@@ -229,7 +229,14 @@ impl EscrowContract {
             MATCH_TTL_LEDGERS,
             MATCH_TTL_LEDGERS,
         );
-        // Mark game_id as used
+        // Mark game_id as used to prevent duplicate registrations.
+        // TTL policy (time-bounded, same window as the match record): GameId entries
+        // are kept alive for MATCH_TTL_LEDGERS (~30 days). Matches are expected to
+        // reach a terminal state (Completed or Cancelled) well within that window, so
+        // the uniqueness guarantee holds for the full lifetime of every active match.
+        // If a GameId entry were to expire before the match resolves, the same game_id
+        // could be re-registered, risking oracle result misrouting — operators must
+        // ensure matches complete within the TTL window.
         env.storage()
             .persistent()
             .set(&DataKey::GameId(m.game_id.clone()), &id);
