@@ -133,6 +133,18 @@ pub enum Winner {
     Draw,
 }
 
+/// A contract-type-compatible representation of `Option<Winner>`.
+///
+/// Soroban `#[contracttype]` structs cannot use `Option<T>` when `T` is itself
+/// a `#[contracttype]` enum, because the derive macro for `T` does not generate
+/// `From<T> for ScVal`. This wrapper enum is used as a drop-in replacement.
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum OptionalWinner {
+    None,
+    Some(Winner),
+}
+
 /// All data stored for a single chess escrow match.
 ///
 /// A `Match` record is created by [`create_match`](crate::EscrowContract::create_match)
@@ -244,7 +256,7 @@ pub struct Match {
     /// admin via [`override_result`](crate::EscrowContract::override_result).
     /// Used by [`finalize_result`](crate::EscrowContract::finalize_result) to
     /// determine the payout. `None` when no result is pending.
-    pub pending_winner: Option<Winner>,
+    pub pending_winner: OptionalWinner,
 }
 
 /// Storage keys used by the escrow contract.

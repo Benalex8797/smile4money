@@ -57,8 +57,8 @@ mod errors;
 mod types;
 
 use errors::Error;
-use soroban_sdk::{contract, contractimpl, symbol_short, token, Address, Env, String, Symbol};
-use types::{DataKey, Match, MatchState, Platform, Winner};
+use soroban_sdk::{contract, contractimpl, symbol_short, token, vec, Address, Env, String, Symbol, Vec};
+use types::{DataKey, Match, MatchState, OptionalWinner, Platform, Winner};
 
 /// ~30 days at 5s/ledger. Used as both the TTL threshold and the extend-to value.
 const MATCH_TTL_LEDGERS: u32 = 518_400;
@@ -227,7 +227,7 @@ impl EscrowContract {
             created_ledger: env.ledger().sequence(),
             activated_ledger: 0,
             pending_result_ledger: 0,
-            pending_winner: None,
+            pending_winner: OptionalWinner::None,
         };
 
         env.storage().persistent().set(&DataKey::Match(id), &m);
@@ -394,7 +394,7 @@ impl EscrowContract {
         // The oracle's result enters a dispute window. No payout yet.
         m.state = MatchState::PendingResult;
         m.pending_result_ledger = env.ledger().sequence();
-        m.pending_winner = Some(winner.clone());
+        m.pending_winner = OptionalWinner::Some(winner.clone());
 
         env.storage()
             .persistent()
@@ -461,7 +461,7 @@ impl EscrowContract {
         }
 
         let old_winner = m.pending_winner.clone();
-        m.pending_winner = Some(new_winner.clone());
+        m.pending_winner = OptionalWinner::Some(new_winner.clone());
 
         env.storage()
             .persistent()
@@ -473,7 +473,7 @@ impl EscrowContract {
         );
 
         env.events().publish(
-            (Symbol::new(&env, "oracle"), symbol_short!("overridden")),
+            (Symbol::new(&env, "oracle"), symbol_short!("overridn")),
             (match_id, old_winner, new_winner),
         );
 
@@ -508,7 +508,10 @@ impl EscrowContract {
             return Err(Error::DisputeWindowActive);
         }
 
-        let winner = m.pending_winner.clone().ok_or(Error::InvalidState)?;
+        let winner = match m.pending_winner.clone() {
+            OptionalWinner::Some(w) => w,
+            OptionalWinner::None => return Err(Error::InvalidState),
+        };
 
         let client = token::Client::new(&env, &m.token);
 
@@ -754,6 +757,25 @@ impl EscrowContract {
             (false, false) => 0,
         };
         Ok(deposited * m.stake_amount)
+    }
+
+    /// Return a page of match IDs in the range `[start, start + limit)`.
+    ///
+    /// `limit` is capped at 100. IDs beyond the current match count are silently
+    /// omitted, so callers can detect the last page when the returned slice is
+    /// shorter than the requested `limit`.
+    pub fn list_matches(env: Env, start: u64, limit: u32) -> Vec<u64> {
+        const MAX_LIMIT: u32 = 100;
+        let limit = limit.min(MAX_LIMIT);
+        let count = Self::get_match_count(&env);
+        let mut ids: Vec<u64> = vec![&env];
+        let end = start.saturating_add(limit as u64).min(count);
+        let mut i = start;
+        while i < end {
+            ids.push_back(i);
+            i += 1;
+        }
+        ids
     }
 }
 

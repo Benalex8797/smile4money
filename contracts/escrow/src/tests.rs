@@ -2013,3 +2013,81 @@ fn test_emergency_drain_fails_for_non_admin() {
         Err(Ok(Error::Unauthorized))
     );
 }
+
+// ── list_matches ─────────────────────────────────────────────────────────────
+
+fn create_n_matches(client: &EscrowContractClient, env: &Env, p1: &Address, p2: &Address, token: &Address, n: u64) {
+    let ids = ["g0", "g1", "g2", "g3", "g4", "g5", "g6", "g7", "g8", "g9",
+               "g10","g11","g12","g13","g14","g15","g16","g17","g18","g19"];
+    for i in 0..n {
+        let game_id = String::from_str(env, ids[i as usize]);
+        client.create_match(p1, p2, &100, token, &game_id, &Platform::Lichess);
+    }
+}
+
+#[test]
+fn test_list_matches_full_range() {
+    let (env, contract_id, _oracle, player1, player2, token, _admin) = setup();
+    let client = EscrowContractClient::new(&env, &contract_id);
+    create_n_matches(&client, &env, &player1, &player2, &token, 5);
+
+    let ids = client.list_matches(&0, &5);
+    assert_eq!(ids.len(), 5);
+    for i in 0u64..5 {
+        assert_eq!(ids.get(i as u32).unwrap(), i);
+    }
+}
+
+#[test]
+fn test_list_matches_partial_range() {
+    let (env, contract_id, _oracle, player1, player2, token, _admin) = setup();
+    let client = EscrowContractClient::new(&env, &contract_id);
+    create_n_matches(&client, &env, &player1, &player2, &token, 5);
+
+    let ids = client.list_matches(&2, &2);
+    assert_eq!(ids.len(), 2);
+    assert_eq!(ids.get(0).unwrap(), 2u64);
+    assert_eq!(ids.get(1).unwrap(), 3u64);
+}
+
+#[test]
+fn test_list_matches_out_of_bounds_start() {
+    let (env, contract_id, _oracle, player1, player2, token, _admin) = setup();
+    let client = EscrowContractClient::new(&env, &contract_id);
+    create_n_matches(&client, &env, &player1, &player2, &token, 3);
+
+    let ids = client.list_matches(&10, &5);
+    assert_eq!(ids.len(), 0);
+}
+
+#[test]
+fn test_list_matches_limit_clamped_at_100() {
+    let (env, contract_id, _oracle, player1, player2, token, _admin) = setup();
+    let client = EscrowContractClient::new(&env, &contract_id);
+    create_n_matches(&client, &env, &player1, &player2, &token, 5);
+
+    // Requesting 200 should only return the 5 that exist (limit capped + count bound)
+    let ids = client.list_matches(&0, &200);
+    assert_eq!(ids.len(), 5);
+}
+
+#[test]
+fn test_list_matches_empty_contract() {
+    let (env, contract_id, ..) = setup();
+    let client = EscrowContractClient::new(&env, &contract_id);
+
+    let ids = client.list_matches(&0, &10);
+    assert_eq!(ids.len(), 0);
+}
+
+#[test]
+fn test_list_matches_partial_last_page() {
+    let (env, contract_id, _oracle, player1, player2, token, _admin) = setup();
+    let client = EscrowContractClient::new(&env, &contract_id);
+    create_n_matches(&client, &env, &player1, &player2, &token, 3);
+
+    // start=2, limit=5 → only ID 2 exists
+    let ids = client.list_matches(&2, &5);
+    assert_eq!(ids.len(), 1);
+    assert_eq!(ids.get(0).unwrap(), 2u64);
+}
