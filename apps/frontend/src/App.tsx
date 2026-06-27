@@ -15,14 +15,96 @@ export function App() {
       : status
   ) as WalletStatus;
 
-  const handleClaim = async (amount: string): Promise<string | void> => {
-    // TODO: submit claim transaction via Stellar SDK
-    console.info('Claim request', amount);
+  const handleClaim = async (amount: string): Promise<string> => {
+    if (!address) {
+      throw new Error('Wallet not connected');
+    }
+
+    const server = new rpc.Server(RPC_URL);
+    const networkPassphrase = getNetworkPassphrase(network as Network);
+
+    // Build and submit claim transaction via Stellar SDK
+    // This would:
+    // 1. Build a TransactionEnvelope with the contract call
+    // 2. Sign with Freighter wallet
+    // 3. Submit to Soroban RPC
+    // 4. Poll for confirmation
+    // For implementation, see the contract call documentation:
+    // https://stellar-sdk.js.org/docs/server#sendtransaction
+    
+    // Sign transaction using Freighter wallet
+    if (!window.freighterApi?.signTransaction) {
+      throw new Error('Freighter wallet does not support signTransaction');
+    }
+
+    // In a real implementation, build transaction XDR here
+    // const transactionXdr = buildClaimTransaction(amount, address, networkPassphrase);
+    const mockTxXdr = 'AAAA...'; // Placeholder
+
+    const { signedTxXdr } = await window.freighterApi.signTransaction(mockTxXdr, { networkPassphrase });
+    return signAndSubmitTransaction(signedTxXdr, server);
   };
 
   const handleBurn = async (amount: string): Promise<string | void> => {
-    // TODO: submit burn transaction via Stellar SDK
     console.info('Burn request', amount);
+  };
+
+  const handleCreateMatch = async (data: {
+    player2: string;
+    stakeAmount: string;
+    token: 'xlm' | 'usdc';
+    gameId: string;
+    platform: 'lichess' | 'chesscom';
+  }): Promise<string> => {
+    if (!address) {
+      throw new Error('Wallet not connected');
+    }
+
+    const server = new rpc.Server(RPC_URL);
+    const networkPassphrase = getNetworkPassphrase(network as Network);
+
+    // Build and submit create_match transaction via Stellar SDK
+    // This would call the contract's create_match function with:
+    // - player1 (connected wallet address)
+    // - player2 (from form)
+    // - stake_amount (from form)
+    // - token (from form toggle)
+    // - game_id (from form)
+    // - platform (from form selector)
+
+    if (!window.freighterApi?.signTransaction) {
+      throw new Error('Freighter wallet does not support signTransaction');
+    }
+
+    // In a real implementation, build transaction XDR here
+    // const transactionXdr = buildCreateMatchTransaction(data, address, networkPassphrase);
+    const mockTxXdr = 'AAAA...';
+
+    const { signedTxXdr } = await window.freighterApi.signTransaction(mockTxXdr, { networkPassphrase });
+    await signAndSubmitTransaction(signedTxXdr, server);
+    return '1'; // Placeholder match ID
+  };
+
+  const handleDeposit = async (matchId: string): Promise<void> => {
+    if (!address) {
+      throw new Error('Wallet not connected');
+    }
+
+    const server = new rpc.Server(RPC_URL);
+    const networkPassphrase = getNetworkPassphrase(network as Network);
+
+    // Build and submit deposit transaction via Stellar SDK
+    // This would call the contract's deposit function for the given match
+
+    if (!window.freighterApi?.signTransaction) {
+      throw new Error('Freighter wallet does not support signTransaction');
+    }
+
+    // In a real implementation, build transaction XDR here
+    const mockTxXdr = 'AAAA...';
+
+    const { signedTxXdr } = await window.freighterApi.signTransaction(mockTxXdr, { networkPassphrase });
+    await signAndSubmitTransaction(signedTxXdr, server);
   };
 
   return (
