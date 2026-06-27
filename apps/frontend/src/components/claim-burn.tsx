@@ -98,7 +98,7 @@ export function ClaimBurn({
 
   function handleRequestSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    if (!isValidAmount(amount)) {
+    if (!isValidAmount(inputAmount)) {
       setStatus('error');
       setErrorMsg('Please enter a valid amount greater than 0.');
       setTxHash(null);
@@ -110,6 +110,7 @@ export function ClaimBurn({
       setTxHash(null);
       return;
     }
+    setConfirmAmount(inputAmount);
     setStatus('confirm');
   }
 
@@ -143,7 +144,7 @@ export function ClaimBurn({
 
   const isPending = status === 'pending';
   const showConfirm = status === 'confirm';
-  const valid = isValidAmount(amount);
+  const valid = isValidAmount(inputAmount);
 
   // ── Wallet state screens ──────────────────────────────────────────
 
@@ -210,12 +211,12 @@ export function ClaimBurn({
                 type="number"
                 min="0"
                 step="any"
-                value={amount}
+                value={inputAmount}
                 onChange={handleAmountChange}
                 disabled
                 placeholder="0.00"
                 data-testid="amount-input"
-                aria-invalid={amount !== '' && !valid}
+                aria-invalid={inputAmount !== '' && !valid}
                 aria-label={`${mode === 'claim' ? 'Claim' : 'Burn'} amount`}
                 aria-describedby={status === 'error' ? 'claim-burn-error' : undefined}
                 className="focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2"
@@ -368,7 +369,7 @@ export function ClaimBurn({
           aria-label={`Confirm ${mode}`}
         >
           <p className="dark:text-slate-100 mb-4 text-base font-semibold text-slate-900">
-            {mode === 'claim' ? 'Claim' : 'Burn'} <strong>{amount}</strong> {tokenSymbol}?
+            {mode === 'claim' ? 'Claim' : 'Burn'} <strong>{confirmAmount}</strong> {tokenSymbol}?
           </p>
           <div className="grid grid-cols-2 gap-3">
             <button
@@ -404,15 +405,15 @@ export function ClaimBurn({
             <input
               ref={amountInputRef}
               id="amount-input"
-              type="number"
-              min="0"
-              step="any"
+              type="text"
+              inputMode="decimal"
+              pattern="^[0-9]*(?:[.,][0-9]*)?$"
               value={inputAmount}
               onChange={handleAmountChange}
               disabled={isPending}
               placeholder="0.00"
               data-testid="amount-input"
-              aria-invalid={amount !== '' && !valid}
+              aria-invalid={inputAmount !== '' && !valid}
               aria-label={`${mode === 'claim' ? 'Claim' : 'Burn'} amount`}
               aria-describedby={status === 'error' ? 'claim-burn-error' : undefined}
               className="focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2"
@@ -420,18 +421,17 @@ export function ClaimBurn({
             {balance != null && (
               <button
                 type="button"
-                className="btn-max focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2"
                 onClick={handleMax}
                 disabled={isPending}
                 data-testid="max-btn"
                 aria-label="Use maximum balance"
-                className="dark:bg-slate-800 dark:border-slate-600 dark:text-violet-400 dark:hover:bg-slate-700 shrink-0 rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 text-sm font-semibold text-violet-600 transition-colors hover:bg-violet-50 disabled:cursor-not-allowed disabled:opacity-50"
+                className="btn-max dark:bg-slate-800 dark:border-slate-600 dark:text-violet-400 dark:hover:bg-slate-700 shrink-0 rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 text-sm font-semibold text-violet-600 transition-colors hover:bg-violet-50 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 Max
               </button>
             )}
           </div>
-          {amount !== '' && !valid && (
+          {inputAmount !== '' && !valid && (
             <p className="text-sm text-red-600 dark:text-red-400" data-testid="amount-error">
               Please enter a valid positive amount
             </p>
