@@ -150,7 +150,7 @@ impl OracleContract {
         env.storage().persistent().set(
             &DataKey::Result(match_id),
             &ResultEntry {
-                game_id,
+                game_id: game_id.clone(),
                 result: result.clone(),
                 submitted_ledger: ledger_seq,
             },
@@ -161,10 +161,9 @@ impl OracleContract {
             MATCH_TTL_LEDGERS,
         );
 
-        let timestamp = env.ledger().timestamp();
         env.events().publish(
             (Symbol::new(&env, "oracle"), symbol_short!("result")),
-            (match_id, result, timestamp),
+            (match_id, game_id, result),
         );
 
         Ok(())
@@ -529,65 +528,112 @@ mod tests {
         assert!(matched.is_some());
     }
 
-    /// Verifies that `submit_result` emits an event with the correct topics
-    /// `(Symbol("oracle"), Symbol("result"))` and payload `(match_id, result, timestamp)`
-    /// for every possible `MatchResult` variant.
     #[test]
-    fn test_oracle_submit_result_emits_event() {
-        let cases: &[(u64, MatchResult)] = &[
-            (1u64, MatchResult::Player1Wins),
-            (2u64, MatchResult::Player2Wins),
-            (3u64, MatchResult::Draw),
+    fn test_oracle_submit_result_emits_event_player1_wins() {
+        let env = Env::default();
+        env.mock_all_auths();
+        let admin = Address::generate(&env);
+        let contract_id = env.register(OracleContract, ());
+        let client = OracleContractClient::new(&env, &contract_id);
+        client.initialize(&admin);
+
+        client.submit_result(
+            &1u64,
+            &String::from_str(&env, "game_abc"),
+            &MatchResult::Player1Wins,
+        );
+
+        let expected_topics = vec![
+            &env,
+            Symbol::new(&env, "oracle").into_val(&env),
+            soroban_sdk::symbol_short!("result").into_val(&env),
         ];
 
-        for (match_id, expected_result) in cases {
-            let env = Env::default();
-            env.mock_all_auths();
-            let admin = Address::generate(&env);
-            let contract_id = env.register(OracleContract, ());
-            let client = OracleContractClient::new(&env, &contract_id);
-            client.initialize(&admin);
+        let events = env.events().all();
+        let matched = events
+            .iter()
+            .find(|(_, topics, _)| *topics == expected_topics);
 
-            client.submit_result(
-                match_id,
-                &String::from_str(&env, "game_abc"),
-                expected_result,
-            );
+        assert!(matched.is_some(), "No result event emitted for Player1Wins");
 
-            let expected_topics = vec![
-                &env,
-                Symbol::new(&env, "oracle").into_val(&env),
-                soroban_sdk::symbol_short!("result").into_val(&env),
-            ];
+        let (_, _, actual_data) = matched.unwrap();
+        let (ev_match_id, ev_game_id, ev_result): (u64, String, MatchResult) =
+            soroban_sdk::TryFromVal::try_from_val(&env, &actual_data).unwrap();
+        assert_eq!(ev_match_id, 1u64, "match_id mismatch for Player1Wins");
+        assert_eq!(ev_game_id, String::from_str(&env, "game_abc"), "game_id mismatch for Player1Wins");
+        assert_eq!(ev_result, MatchResult::Player1Wins, "result mismatch for Player1Wins");
+    }
 
-            let timestamp = env.ledger().timestamp();
+    #[test]
+    fn test_oracle_submit_result_emits_event_player2_wins() {
+        let env = Env::default();
+        env.mock_all_auths();
+        let admin = Address::generate(&env);
+        let contract_id = env.register(OracleContract, ());
+        let client = OracleContractClient::new(&env, &contract_id);
+        client.initialize(&admin);
 
-            let events = env.events().all();
-            let matched = events
-                .iter()
-                .find(|(_, topics, _)| *topics == expected_topics);
+        client.submit_result(
+            &2u64,
+            &String::from_str(&env, "game_abc"),
+            &MatchResult::Player2Wins,
+        );
 
-            assert!(
-                matched.is_some(),
-                "No result event emitted for variant {expected_result:?}",
-            );
+        let expected_topics = vec![
+            &env,
+            Symbol::new(&env, "oracle").into_val(&env),
+            soroban_sdk::symbol_short!("result").into_val(&env),
+        ];
 
-            let (_, _, actual_data) = matched.unwrap();
-            let (ev_match_id, ev_result, ev_timestamp): (u64, MatchResult, u64) =
-                soroban_sdk::TryFromVal::try_from_val(&env, &actual_data).unwrap();
-            assert_eq!(
-                ev_match_id, *match_id,
-                "match_id mismatch for variant {expected_result:?}",
-            );
-            assert_eq!(
-                &ev_result, expected_result,
-                "result mismatch for variant {expected_result:?}",
-            );
-            assert_eq!(
-                ev_timestamp, timestamp,
-                "timestamp mismatch for variant {expected_result:?}",
-            );
-        }
+        let events = env.events().all();
+        let matched = events
+            .iter()
+            .find(|(_, topics, _)| *topics == expected_topics);
+
+        assert!(matched.is_some(), "No result event emitted for Player2Wins");
+
+        let (_, _, actual_data) = matched.unwrap();
+        let (ev_match_id, ev_game_id, ev_result): (u64, String, MatchResult) =
+            soroban_sdk::TryFromVal::try_from_val(&env, &actual_data).unwrap();
+        assert_eq!(ev_match_id, 2u64, "match_id mismatch for Player2Wins");
+        assert_eq!(ev_game_id, String::from_str(&env, "game_abc"), "game_id mismatch for Player2Wins");
+        assert_eq!(ev_result, MatchResult::Player2Wins, "result mismatch for Player2Wins");
+    }
+
+    #[test]
+    fn test_oracle_submit_result_emits_event_draw() {
+        let env = Env::default();
+        env.mock_all_auths();
+        let admin = Address::generate(&env);
+        let contract_id = env.register(OracleContract, ());
+        let client = OracleContractClient::new(&env, &contract_id);
+        client.initialize(&admin);
+
+        client.submit_result(
+            &3u64,
+            &String::from_str(&env, "game_abc"),
+            &MatchResult::Draw,
+        );
+
+        let expected_topics = vec![
+            &env,
+            Symbol::new(&env, "oracle").into_val(&env),
+            soroban_sdk::symbol_short!("result").into_val(&env),
+        ];
+
+        let events = env.events().all();
+        let matched = events
+            .iter()
+            .find(|(_, topics, _)| *topics == expected_topics);
+
+        assert!(matched.is_some(), "No result event emitted for Draw");
+
+        let (_, _, actual_data) = matched.unwrap();
+        let (ev_match_id, ev_game_id, ev_result): (u64, String, MatchResult) =
+            soroban_sdk::TryFromVal::try_from_val(&env, &actual_data).unwrap();
+        assert_eq!(ev_match_id, 3u64, "match_id mismatch for Draw");
+        assert_eq!(ev_game_id, String::from_str(&env, "game_abc"), "game_id mismatch for Draw");
+        assert_eq!(ev_result, MatchResult::Draw, "result mismatch for Draw");
     }
 
     #[test]
