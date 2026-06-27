@@ -245,6 +245,14 @@ pub struct Match {
     /// Used by [`finalize_result`](crate::EscrowContract::finalize_result) to
     /// determine the payout. `None` when no result is pending.
     pub pending_winner: Option<Winner>,
+
+    /// The ledger sequence number at which this match was completed and the
+    /// payout was executed.
+    ///
+    /// Set to `Some(env.ledger().sequence())` by
+    /// [`finalize_result`](crate::EscrowContract::finalize_result) when the match
+    /// transitions to [`MatchState::Completed`]. `None` for all other states.
+    pub completed_ledger: Option<u32>,
 }
 
 /// Storage keys used by the escrow contract.

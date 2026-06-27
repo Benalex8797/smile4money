@@ -1,0 +1,139 @@
+.toast-portal {
+  position: fixed;
+  right: 1rem;
+  top: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  z-index: 1000;
+}
+
+.toast {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.9rem 1rem;
+  border-radius: 0.75rem;
+  min-width: 280px;
+  box-shadow: 0 16px 40px rgba(15, 23, 42, 0.12);
+  color: #fff;
+  font-size: 0.95rem;
+}
+
+.toast-success {
+  background: #0f766e;
+}
+
+.toast-error {
+  background: #b91c1c;
+}
+
+.toast-info {
+  background: #2563eb;
+}
+
+.toast-body p {
+  margin: 0.25rem 0 0;
+  font-size: 0.85rem;
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.toast-close {
+  border: none;
+  background: transparent;
+  color: #fff;
+  font-size: 1rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.tx-hash-block {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.tx-hash-value {
+  font-family: 'SF Mono', 'Fira Code', monospace;
+  font-size: 0.8rem;
+  color: #4338ca;
+}
+
+.tx-hash-copy-btn {
+  border: 1px solid #d1d5db;
+  background: #fff;
+  padding: 0.35rem 0.65rem;
+  border-radius: 0.55rem;
+  cursor: pointer;
+  font-size: 0.9rem;
+}
+
+.tx-hash-status,
+.tx-hash-error {
+  font-size: 0.8rem;
+  line-height: 1;
+}
+
+.history-page {
+  padding: 1.5rem;
+  border-radius: 1rem;
+  background: #fff;
+  box-shadow: 0 2px 16px rgba(15, 23, 42, 0.08);
+  color: #111827;
+}
+
+.history-page h2 {
+  margin-top: 0;
+  margin-bottom: 1rem;
+  font-size: 1.25rem;
+}
+
+.history-table-wrap {
+  overflow-x: auto;
+}
+
+.history-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.history-table th,
+.history-table td {
+  padding: 0.85rem 0.75rem;
+  text-align: left;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.history-table th {
+  color: #374151;
+  font-size: 0.85rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.history-table tr:hover {
+  background: #f8fafc;
+}
+
+.history-pagination {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
+.history-pagination button {
+  padding: 0.75rem 1rem;
+  border-radius: 0.75rem;
+  border: 1px solid #d1d5db;
+  background: #f9fafb;
+  cursor: pointer;
+}
+
+.history-pagination button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}

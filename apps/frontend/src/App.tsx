@@ -1,63 +1,13 @@
 import { ClaimBurn } from './components/claim-burn';
 import { NetworkBadge } from './components/NetworkBadge';
-import { CreateMatch } from './components/CreateMatch';
-import { DepositStake } from './components/DepositStake';
-import { MatchStatus } from './components/MatchStatus';
+import { History } from './pages/History';
 import { useStellarWallet } from './hooks/useStellarWallet';
-import { Networks, rpc } from '@stellar/stellar-sdk';
-import type { WalletStatus, Network } from './types';
-
-// Extend import.meta env for TypeScript
-declare global {
-  interface ImportMetaEnv {
-    VITE_CONTRACT_ESCROW?: string;
-    VITE_STELLAR_RPC_URL?: string;
-    VITE_STELLAR_NETWORK?: string;
-  }
-  interface Window {
-    freighterApi?: {
-      isConnected: () => Promise<{ isConnected: boolean }>;
-      getPublicKey: () => Promise<string>;
-      signTransaction: (
-        xdr: string,
-        opts?: { networkPassphrase?: string },
-      ) => Promise<{ signedTxXdr: string }>;
-      getNetwork?: () => Promise<{ network: string; networkPassphrase: string }>;
-    };
-  }
-}
-
-const CONTRACT_ESCROW = (import.meta.env as ImportMetaEnv).VITE_CONTRACT_ESCROW || '';
-const RPC_URL = (import.meta.env as ImportMetaEnv).VITE_STELLAR_RPC_URL || 'https://soroban-testnet.stellar.org';
-
-function getNetworkPassphrase(network: Network): string {
-  if (network === 'testnet') return Networks.TESTNET;
-  if (network === 'mainnet') return Networks.PUBLIC;
-  return Networks.TESTNET;
-}
-
-async function signAndSubmitTransaction(
-  signedTxXdr: string,
-  server: rpc.Server,
-): Promise<string> {
-  // Submit transaction - using type assertion to bypass complex Transaction type
-  const result = await (server.sendTransaction as any)(signedTxXdr);
-
-  if (result.status !== 'PENDING') {
-    throw new Error(`Transaction submission failed: ${result.status}`);
-  }
-
-  // Poll for transaction confirmation
-  if (result.hash) {
-    await server.pollTransaction(result.hash);
-    return result.hash;
-  }
-
-  throw new Error('Transaction submitted but no hash returned');
-}
+import { useTheme } from './hooks/useTheme';
+import type { WalletStatus } from './types';
 
 export function App() {
   const { status, address, balance, network, connect, disconnect, refreshBalance } = useStellarWallet();
+  const { theme, toggle } = useTheme();
 
   const walletState = (
     status === 'connected' && network !== 'unknown' && network !== 'testnet'
@@ -158,11 +108,19 @@ export function App() {
   };
 
   return (
-    <main className="bg-gray-100" style={{ padding: '2rem', minHeight: '100vh' }}>
-      <div className="mb-4">
+    <main className="dark:bg-slate-950 dark:text-slate-100 min-h-screen bg-gray-100 px-4 py-6 text-slate-900 transition-colors">
+      <div className="mx-auto mb-4 flex max-w-2xl items-center justify-between">
         <NetworkBadge />
+        <button
+          type="button"
+          onClick={toggle}
+          aria-label={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
+          className="dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50"
+        >
+          {theme === 'dark' ? '☀️ Light' : '🌙 Dark'}
+        </button>
       </div>
-      <div className="grid gap-6 md:grid-cols-2">
+      <div className="grid gap-6 lg:grid-cols-[1fr_420px]">
         <div>
           <ClaimBurn
             walletState={walletState}
@@ -177,33 +135,7 @@ export function App() {
           />
         </div>
         <div>
-          <CreateMatch
-            contractId={CONTRACT_ESCROW}
-            player1Address={address}
-            networkPassphrase={getNetworkPassphrase(network as Network)}
-            rpcUrl={RPC_URL}
-            onCreateMatch={handleCreateMatch}
-          />
-        </div>
-      </div>
-      <div className="mt-6 grid gap-6 md:grid-cols-2">
-        <div>
-          <DepositStake
-            matchId="1"
-            playerAddress={address}
-            contractId={CONTRACT_ESCROW}
-            networkPassphrase={getNetworkPassphrase(network as Network)}
-            rpcUrl={RPC_URL}
-            onDeposit={handleDeposit}
-          />
-        </div>
-        <div>
-          <MatchStatus
-            matchId="1"
-            contractId={CONTRACT_ESCROW}
-            rpcUrl={RPC_URL}
-            networkPassphrase={getNetworkPassphrase(network as Network)}
-          />
+          <History walletState={walletState} publicKey={address} />
         </div>
       </div>
     </main>

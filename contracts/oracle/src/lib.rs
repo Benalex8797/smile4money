@@ -55,7 +55,7 @@ mod errors;
 mod types;
 
 use errors::Error;
-use soroban_sdk::{contract, contractimpl, symbol_short, Address, Env, String, Symbol};
+use soroban_sdk::{contract, contractimpl, symbol_short, token, Address, Env, String, Symbol, Vec};
 use types::{DataKey, MatchResult, ResultEntry};
 
 /// ~30 days at 5s/ledger.
@@ -63,6 +63,9 @@ const MATCH_TTL_LEDGERS: u32 = 518_400;
 
 /// Maximum allowed byte length for a game_id string.
 const MAX_GAME_ID_LEN: u32 = 64;
+
+/// Maximum number of entries returned by list_results in a single call.
+const MAX_LIST_LIMIT: u32 = 100;
 
 #[contract]
 pub struct OracleContract;
@@ -141,6 +144,9 @@ impl OracleContract {
         }
 
         let ledger_seq = env.ledger().sequence();
+        // SAFETY: Soroban's single-execution model prevents re-entrancy; no cross-contract
+        // calls are made here, so the state written below cannot be observed by a
+        // re-entrant caller before this function returns.
         env.storage().persistent().set(
             &DataKey::Result(match_id),
             &ResultEntry {
@@ -223,7 +229,75 @@ impl OracleContract {
 
         Ok(())
     }
-}
+
+    /// Recover tokens accidentally sent to the oracle contract address.
+    ///
+    /// Only the admin may call this. Uses `try_transfer` so that a failed transfer
+    /// returns [`Error::TransferFailed`] rather than aborting the transaction.
+    ///
+    /// # Arguments
+    ///
+    /// * `token`  — The SEP-41 token contract address.
+    /// * `amount` — Number of stroops to transfer (must be > 0).
+    /// * `to`     — Destination address for the recovered funds.
+    /// * `caller` — Must equal the registered admin; `require_auth` is called on it.
+    ///
+    /// # Errors
+    ///
+    /// * [`Error::Unauthorized`]   — Contract not yet initialized or caller ≠ admin.
+    /// * [`Error::TransferFailed`] — The token transfer was rejected.
+    pub fn withdraw(
+        env: Env,
+        token: Address,
+        amount: i128,
+        to: Address,
+        caller: Address,
+    ) -> Result<(), Error> {
+        let admin: Address = env
+            .storage()
+            .instance()
+            .get(&DataKey::Admin)
+            .ok_or(Error::Unauthorized)?;
+        if caller != admin {
+            return Err(Error::Unauthorized);
+        }
+        caller.require_auth();
+
+        // SAFETY: token::Client::try_transfer is a cross-contract call. Soroban's
+        // single-execution model ensures no re-entrancy is possible: the token
+        // contract cannot call back into this oracle contract during the transfer.
+        token::Client::new(&env, &token)
+            .try_transfer(&env.current_contract_address(), &to, &amount)
+            .map_err(|_| Error::TransferFailed)?;
+
+        Ok(())
+    }
+
+    /// Enumerate stored results for off-chain reconciliation.
+    ///
+    /// Returns up to `limit` `(match_id, ResultEntry)` pairs starting from `start`,
+    /// scanning match IDs `[start, start + limit)`. IDs with no stored result are
+    /// skipped. `limit` is capped at [`MAX_LIST_LIMIT`] (100) to bound compute.
+    ///
+    /// # Arguments
+    ///
+    /// * `start` — First match_id to check (inclusive).
+    /// * `limit` — Maximum number of entries to return (capped at 100).
+    pub fn list_results(env: Env, start: u64, limit: u32) -> Vec<(u64, ResultEntry)> {
+        let cap = limit.min(MAX_LIST_LIMIT);
+        let mut out: Vec<(u64, ResultEntry)> = Vec::new(&env);
+        for i in 0..cap as u64 {
+            let id = start.saturating_add(i);
+            if let Some(entry) = env
+                .storage()
+                .persistent()
+                .get::<DataKey, ResultEntry>(&DataKey::Result(id))
+            {
+                out.push_back((id, entry));
+            }
+        }
+        out
+    }
 
 #[cfg(test)]
 mod tests {
