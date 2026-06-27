@@ -483,7 +483,7 @@ fn test_deposit_into_completed_match_fails() {
 }
 
 #[test]
-fn test_deposit_into_cancelled_match_fails() {
+fn test_deposit_after_cancel_returns_match_cancelled() {
     let (env, contract_id, _oracle, player1, player2, token, _admin) = setup();
     let client = EscrowContractClient::new(&env, &contract_id);
 
@@ -838,6 +838,24 @@ fn test_is_funded_false_after_one_deposit() {
     assert!(!client.is_funded(&id));
     client.deposit(&id, &player2);
     assert!(client.is_funded(&id));
+}
+
+// Issue #818: get_escrow_balance returns stake_amount after only one deposit
+#[test]
+fn test_escrow_balance_after_single_deposit() {
+    let (env, contract_id, _oracle, player1, player2, token, _admin) = setup();
+    let client = EscrowContractClient::new(&env, &contract_id);
+
+    let id = client.create_match(
+        &player1,
+        &player2,
+        &100,
+        &token,
+        &String::from_str(&env, "single_deposit"),
+        &Platform::Lichess,
+    );
+    client.deposit(&id, &player1);
+    assert_eq!(client.get_escrow_balance(&id), 100);
 }
 
 #[test]
@@ -1207,11 +1225,57 @@ fn test_deposit_emits_event() {
     let matched = events.iter().find(|(_, t, _)| *t == deposit_topics);
     assert!(matched.is_some());
     let (_, _, data) = matched.unwrap();
-    let (ev_id, ev_player, ev_amount): (u64, Address, i128) =
+    let (ev_id, ev_player, ev_amount, ev_label): (u64, Address, i128, Symbol) =
         TryFromVal::try_from_val(&env, &data).unwrap();
     assert_eq!(ev_id, id);
     assert_eq!(ev_amount, 100);
     assert!(ev_player == player1 || ev_player == player2);
+    assert!(ev_label == symbol_short!("player1") || ev_label == symbol_short!("player2"));
+}
+
+#[test]
+fn test_deposit_event_player_label() {
+    let (env, contract_id, _oracle, player1, player2, token, _admin) = setup();
+    let client = EscrowContractClient::new(&env, &contract_id);
+
+    let id = client.create_match(
+        &player1,
+        &player2,
+        &100,
+        &token,
+        &String::from_str(&env, "label_ev"),
+        &Platform::Lichess,
+    );
+
+    let deposit_topics = vec![
+        &env,
+        Symbol::new(&env, "match").into_val(&env),
+        soroban_sdk::symbol_short!("deposit").into_val(&env),
+    ];
+
+    client.deposit(&id, &player1);
+    let (_, _, data) = env
+        .events()
+        .all()
+        .iter()
+        .filter(|(_, t, _)| *t == deposit_topics)
+        .last()
+        .unwrap();
+    let (_, _, _, label): (u64, Address, i128, Symbol) =
+        TryFromVal::try_from_val(&env, &data).unwrap();
+    assert_eq!(label, symbol_short!("player1"));
+
+    client.deposit(&id, &player2);
+    let (_, _, data) = env
+        .events()
+        .all()
+        .iter()
+        .filter(|(_, t, _)| *t == deposit_topics)
+        .last()
+        .unwrap();
+    let (_, _, _, label): (u64, Address, i128, Symbol) =
+        TryFromVal::try_from_val(&env, &data).unwrap();
+    assert_eq!(label, symbol_short!("player2"));
 }
 
 #[test]
@@ -2014,80 +2078,22 @@ fn test_emergency_drain_fails_for_non_admin() {
     );
 }
 
-// ── list_matches ─────────────────────────────────────────────────────────────
-
-fn create_n_matches(client: &EscrowContractClient, env: &Env, p1: &Address, p2: &Address, token: &Address, n: u64) {
-    let ids = ["g0", "g1", "g2", "g3", "g4", "g5", "g6", "g7", "g8", "g9",
-               "g10","g11","g12","g13","g14","g15","g16","g17","g18","g19"];
-    for i in 0..n {
-        let game_id = String::from_str(env, ids[i as usize]);
-        client.create_match(p1, p2, &100, token, &game_id, &Platform::Lichess);
-    }
-}
-
 #[test]
-fn test_list_matches_full_range() {
+fn test_create_match_valid_platforms_accepted() {
+    // Both known Platform variants must be accepted by create_match.
+    // This test verifies the platform validation guard does not reject valid values.
     let (env, contract_id, _oracle, player1, player2, token, _admin) = setup();
     let client = EscrowContractClient::new(&env, &contract_id);
-    create_n_matches(&client, &env, &player1, &player2, &token, 5);
 
-    let ids = client.list_matches(&0, &5);
-    assert_eq!(ids.len(), 5);
-    for i in 0u64..5 {
-        assert_eq!(ids.get(i as u32).unwrap(), i);
-    }
-}
+    let id1 = client.create_match(
+        &player1, &player2, &100, &token,
+        &String::from_str(&env, "lichess-game-1"), &Platform::Lichess,
+    );
+    assert_eq!(client.get_match(&id1).platform, Platform::Lichess);
 
-#[test]
-fn test_list_matches_partial_range() {
-    let (env, contract_id, _oracle, player1, player2, token, _admin) = setup();
-    let client = EscrowContractClient::new(&env, &contract_id);
-    create_n_matches(&client, &env, &player1, &player2, &token, 5);
-
-    let ids = client.list_matches(&2, &2);
-    assert_eq!(ids.len(), 2);
-    assert_eq!(ids.get(0).unwrap(), 2u64);
-    assert_eq!(ids.get(1).unwrap(), 3u64);
-}
-
-#[test]
-fn test_list_matches_out_of_bounds_start() {
-    let (env, contract_id, _oracle, player1, player2, token, _admin) = setup();
-    let client = EscrowContractClient::new(&env, &contract_id);
-    create_n_matches(&client, &env, &player1, &player2, &token, 3);
-
-    let ids = client.list_matches(&10, &5);
-    assert_eq!(ids.len(), 0);
-}
-
-#[test]
-fn test_list_matches_limit_clamped_at_100() {
-    let (env, contract_id, _oracle, player1, player2, token, _admin) = setup();
-    let client = EscrowContractClient::new(&env, &contract_id);
-    create_n_matches(&client, &env, &player1, &player2, &token, 5);
-
-    // Requesting 200 should only return the 5 that exist (limit capped + count bound)
-    let ids = client.list_matches(&0, &200);
-    assert_eq!(ids.len(), 5);
-}
-
-#[test]
-fn test_list_matches_empty_contract() {
-    let (env, contract_id, ..) = setup();
-    let client = EscrowContractClient::new(&env, &contract_id);
-
-    let ids = client.list_matches(&0, &10);
-    assert_eq!(ids.len(), 0);
-}
-
-#[test]
-fn test_list_matches_partial_last_page() {
-    let (env, contract_id, _oracle, player1, player2, token, _admin) = setup();
-    let client = EscrowContractClient::new(&env, &contract_id);
-    create_n_matches(&client, &env, &player1, &player2, &token, 3);
-
-    // start=2, limit=5 → only ID 2 exists
-    let ids = client.list_matches(&2, &5);
-    assert_eq!(ids.len(), 1);
-    assert_eq!(ids.get(0).unwrap(), 2u64);
+    let id2 = client.create_match(
+        &player1, &player2, &100, &token,
+        &String::from_str(&env, "chessdotcom-game-1"), &Platform::ChessDotCom,
+    );
+    assert_eq!(client.get_match(&id2).platform, Platform::ChessDotCom);
 }

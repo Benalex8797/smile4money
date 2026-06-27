@@ -1,7 +1,7 @@
 import React from 'react';
 import { render, screen } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { NetworkBanner } from '../../src/components/NetworkBanner';
+import { NetworkBanner } from '../src/components/NetworkBanner';
 
 // Mock VITE_STELLAR_NETWORK env variable
 beforeEach(() => {

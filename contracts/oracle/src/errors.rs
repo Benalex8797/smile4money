@@ -16,6 +16,7 @@ use soroban_sdk::contracterror;
 /// |  3   | ResultNotFound     | No result has been submitted for the given match_id      |
 /// |  4   | AlreadyInitialized | Contract has already been initialized                    |
 /// |  5   | InvalidGameId      | game_id is empty or exceeds the 64-byte maximum          |
+/// |  6   | TransferFailed     | Token transfer in withdraw failed                        |
 #[contracterror]
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum Error {
@@ -34,4 +35,7 @@ pub enum Error {
 
     /// [E005] `game_id` is empty or exceeds the 64-byte maximum length.
     InvalidGameId = 5,
+
+    /// [E006] Token transfer failed during `withdraw`.
+    TransferFailed = 6,
 }
