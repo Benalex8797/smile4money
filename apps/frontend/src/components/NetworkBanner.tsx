@@ -1,3 +1,5 @@
+import React from 'react';
+
 const EXPECTED_NETWORK =
   (typeof import.meta !== 'undefined' &&
     (import.meta as { env?: { VITE_STELLAR_NETWORK?: string } }).env
