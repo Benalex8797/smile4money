@@ -63,6 +63,26 @@ use types::{DataKey, Match, MatchState, OptionalWinner, Platform, Winner};
 /// ~30 days at 5s/ledger. Used as both the TTL threshold and the extend-to value.
 const MATCH_TTL_LEDGERS: u32 = 518_400;
 
+/// Minimum stake amount in the smallest token unit (1 stroop).
+/// Prevents economically meaningless zero-stake matches.
+const MIN_STAKE: i128 = 1;
+
+/// Maximum stake amount in the smallest token unit.
+/// Prevents a single match from locking unbounded funds in escrow,
+/// concentrating risk, and amplifying the impact of any exploit.
+const MAX_STAKE: i128 = 10_000_000_000_000;
+
+/// Instance-storage TTL threshold (~30 days at 5s/ledger).
+/// Instance entries (oracle, admin, token, paused, match_count) are
+/// extended to this many ledgers from the current ledger on every write.
+/// Without this, metadata entries would expire and the contract would
+/// become non-functional with storage-not-found errors.
+const INSTANCE_LIFETIME_THRESHOLD: u32 = 518_400;
+
+/// The number of ledgers to extend instance-storage entries to.
+/// Uses the same ~30-day window as persistent match storage.
+const INSTANCE_BUMP_AMOUNT: u32 = 518_400;
+
 /// Maximum allowed byte length for a game_id string.
 const MAX_GAME_ID_LEN: u32 = 64;
 
@@ -123,6 +143,9 @@ impl EscrowContract {
         env.storage().instance().set(&DataKey::Token, &token);
         env.storage().instance().set(&DataKey::MatchCount, &0u64);
         env.storage().instance().set(&DataKey::Paused, &false);
+        env.storage()
+            .instance()
+            .extend_ttl(INSTANCE_LIFETIME_THRESHOLD, INSTANCE_BUMP_AMOUNT);
         Ok(())
     }
 
@@ -135,6 +158,9 @@ impl EscrowContract {
             .ok_or(Error::Unauthorized)?;
         admin.require_auth();
         env.storage().instance().set(&DataKey::Oracle, &new_oracle);
+        env.storage()
+            .instance()
+            .extend_ttl(INSTANCE_LIFETIME_THRESHOLD, INSTANCE_BUMP_AMOUNT);
         env.events().publish(
             (Symbol::new(&env, "admin"), symbol_short!("oracle")),
             new_oracle,
@@ -151,6 +177,9 @@ impl EscrowContract {
             .ok_or(Error::Unauthorized)?;
         admin.require_auth();
         env.storage().instance().set(&DataKey::Paused, &true);
+        env.storage()
+            .instance()
+            .extend_ttl(INSTANCE_LIFETIME_THRESHOLD, INSTANCE_BUMP_AMOUNT);
         env.events()
             .publish((Symbol::new(&env, "admin"), symbol_short!("paused")), ());
         Ok(())
@@ -165,6 +194,9 @@ impl EscrowContract {
             .ok_or(Error::Unauthorized)?;
         admin.require_auth();
         env.storage().instance().set(&DataKey::Paused, &false);
+        env.storage()
+            .instance()
+            .extend_ttl(INSTANCE_LIFETIME_THRESHOLD, INSTANCE_BUMP_AMOUNT);
         env.events()
             .publish((Symbol::new(&env, "admin"), symbol_short!("unpaused")), ());
         Ok(())
@@ -185,8 +217,11 @@ impl EscrowContract {
         if Self::is_paused(&env) {
             return Err(Error::ContractPaused);
         }
-        if stake_amount <= 0 {
-            return Err(Error::InvalidAmount);
+        if stake_amount < MIN_STAKE {
+            return Err(Error::StakeTooLow);
+        }
+        if stake_amount > MAX_STAKE {
+            return Err(Error::StakeTooHigh);
         }
         if player1 == player2 {
             return Err(Error::InvalidPlayers);
@@ -227,8 +262,9 @@ impl EscrowContract {
             created_ledger: env.ledger().sequence(),
             activated_ledger: 0,
             pending_result_ledger: 0,
-            pending_winner: None,
+            pending_winner: OptionalWinner::None,
             completed_ledger: None,
+            cancelled_ledger: None,
         };
 
         env.storage().persistent().set(&DataKey::Match(id), &m);
@@ -247,6 +283,9 @@ impl EscrowContract {
         );
         let next_id = id.checked_add(1).ok_or(Error::Overflow)?;
         env.storage().instance().set(&DataKey::MatchCount, &next_id);
+        env.storage()
+            .instance()
+            .extend_ttl(INSTANCE_LIFETIME_THRESHOLD, INSTANCE_BUMP_AMOUNT);
 
         env.events().publish(
             (Symbol::new(&env, "match"), symbol_short!("created")),
@@ -736,6 +775,14 @@ impl EscrowContract {
         );
 
         Ok(())
+    }
+
+    /// Read the registered oracle address.
+    pub fn get_oracle(env: Env) -> Address {
+        env.storage()
+            .instance()
+            .get(&DataKey::Oracle)
+            .expect("oracle not initialized")
     }
 
     /// Read a match by ID.

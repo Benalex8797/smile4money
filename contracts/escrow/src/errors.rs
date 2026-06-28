@@ -34,6 +34,8 @@ use soroban_sdk::contracterror;
 /// | 21   | MatchTimedOut         | match has already timed out; use claim_timeout to reclaim funds |
 /// | 20   | DisputeWindowActive   | finalize_result called before the dispute window has expired |
 /// | 21   | MatchTimedOut         | match has already timed out; use claim_timeout to reclaim funds |
+/// | 22   | StakeTooLow           | stake_amount is below the minimum threshold                  |
+/// | 23   | StakeTooHigh          | stake_amount exceeds the maximum cap                         |
 #[contracterror]
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum Error {
@@ -108,4 +110,12 @@ pub enum Error {
     /// [E021] The match has already been active for longer than `TIMEOUT_LEDGERS` without an
     /// oracle result. The match is effectively timed out; players should call `claim_timeout`.
     MatchTimedOut = 21,
+
+    /// [E022] The `stake_amount` is below the minimum threshold (`MIN_STAKE`).
+    /// Zero and negative amounts are also rejected through this error.
+    StakeTooLow = 22,
+
+    /// [E023] The `stake_amount` exceeds the maximum allowed cap (`MAX_STAKE`).
+    /// Prevents a single match from locking unbounded funds in escrow.
+    StakeTooHigh = 23,
 }
