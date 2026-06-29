@@ -1088,6 +1088,24 @@ fn test_non_admin_cannot_unpause() {
 }
 
 #[test]
+fn test_is_paused_returns_false_by_default() {
+    let (env, contract_id, ..) = setup();
+    let client = EscrowContractClient::new(&env, &contract_id);
+    assert!(!client.is_paused());
+}
+
+#[test]
+fn test_is_paused_returns_true_after_pause() {
+    let (env, contract_id, ..) = setup();
+    let client = EscrowContractClient::new(&env, &contract_id);
+    assert!(!client.is_paused());
+    client.pause();
+    assert!(client.is_paused());
+    client.unpause();
+    assert!(!client.is_paused());
+}
+
+#[test]
 fn test_pause_unpause_events() {
     let (env, contract_id, _, _, _, _, _) = setup();
     let client = EscrowContractClient::new(&env, &contract_id);
