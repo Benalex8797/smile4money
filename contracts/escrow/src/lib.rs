@@ -203,6 +203,15 @@ impl EscrowContract {
             return Err(Error::DuplicateGameId);
         }
 
+        let stored_token: Address = env
+            .storage()
+            .instance()
+            .get(&DataKey::Token)
+            .ok_or(Error::Unauthorized)?;
+        if token != stored_token {
+            return Err(Error::InvalidToken);
+        }
+
         let id: u64 = env
             .storage()
             .instance()
@@ -227,7 +236,8 @@ impl EscrowContract {
             created_ledger: env.ledger().sequence(),
             activated_ledger: 0,
             pending_result_ledger: 0,
-            pending_winner: None,
+            pending_winner: OptionalWinner::None,
+            cancelled_ledger: None,
             completed_ledger: None,
         };
 

@@ -784,6 +784,29 @@ fn test_create_match_empty_game_id_fails() {
 }
 
 #[test]
+fn test_create_match_wrong_token_fails() {
+    let (env, contract_id, _oracle, player1, player2, _token, admin) = setup();
+    let client = EscrowContractClient::new(&env, &contract_id);
+
+    // Register a different token contract
+    let wrong_token = env
+        .register_stellar_asset_contract_v2(admin.clone())
+        .address();
+
+    assert_eq!(
+        client.try_create_match(
+            &player1,
+            &player2,
+            &100,
+            &wrong_token,
+            &String::from_str(&env, "wrong_token"),
+            &Platform::Lichess,
+        ),
+        Err(Ok(Error::InvalidToken))
+    );
+}
+
+#[test]
 #[should_panic(expected = "Error(Contract, #4)")]
 fn test_unauthorized_player_cannot_cancel() {
     let (env, contract_id, _oracle, player1, player2, token, _admin) = setup();
