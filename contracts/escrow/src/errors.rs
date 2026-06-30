@@ -32,9 +32,7 @@ use soroban_sdk::contracterror;
 /// | 19   | InsufficientAllowance | player has not approved sufficient token allowance |
 /// | 20   | DisputeWindowActive   | finalize_result called before the dispute window has expired |
 /// | 21   | MatchTimedOut         | match has already timed out; use claim_timeout to reclaim funds |
-/// | 20   | DisputeWindowActive   | finalize_result called before the dispute window has expired |
-/// | 21   | MatchTimedOut         | match has already timed out; use claim_timeout to reclaim funds |
-/// | 22   | InvalidAdmin          | new admin address is not a valid rotation target |
+/// | 22   | InvalidToken          | the provided token address does not match the initialized token |
 #[contracterror]
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum Error {
@@ -110,6 +108,7 @@ pub enum Error {
     /// oracle result. The match is effectively timed out; players should call `claim_timeout`.
     MatchTimedOut = 21,
 
-    /// [E022] The requested admin address is not a valid rotation target.
-    InvalidAdmin = 22,
+    /// [E022] The provided token address does not match the token set during `initialize`.
+    /// `create_match` requires the token to match the contract's configured token.
+    InvalidToken = 22,
 }
