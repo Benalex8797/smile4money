@@ -34,6 +34,7 @@ use soroban_sdk::contracterror;
 /// | 21   | MatchTimedOut         | match has already timed out; use claim_timeout to reclaim funds |
 /// | 20   | DisputeWindowActive   | finalize_result called before the dispute window has expired |
 /// | 21   | MatchTimedOut         | match has already timed out; use claim_timeout to reclaim funds |
+/// | 22   | InvalidAdmin          | new admin address is not a valid rotation target |
 #[contracterror]
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum Error {
@@ -108,4 +109,7 @@ pub enum Error {
     /// [E021] The match has already been active for longer than `TIMEOUT_LEDGERS` without an
     /// oracle result. The match is effectively timed out; players should call `claim_timeout`.
     MatchTimedOut = 21,
+
+    /// [E022] The requested admin address is not a valid rotation target.
+    InvalidAdmin = 22,
 }

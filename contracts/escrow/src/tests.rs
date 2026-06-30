@@ -1066,9 +1066,10 @@ fn test_non_admin_cannot_unpause() {
 
 #[test]
 fn test_pause_unpause_events() {
-    let (env, contract_id, _, _, _, _, _) = setup();
+    let (env, contract_id, _, _, _, _, admin) = setup();
     let client = EscrowContractClient::new(&env, &contract_id);
 
+    let expected_pause_ledger_sequence = env.ledger().sequence();
     client.pause();
     let events = env.events().all();
     let last_event = events.last().unwrap();
@@ -1082,8 +1083,12 @@ fn test_pause_unpause_events() {
         Symbol::try_from_val(&env, &last_event.1.get(1).unwrap()).unwrap(),
         symbol_short!("paused")
     );
-    assert!(<()>::try_from_val(&env, &last_event.2).is_ok());
+    let (ev_admin, ev_ledger_sequence): (Address, u32) =
+        TryFromVal::try_from_val(&env, &last_event.2).unwrap();
+    assert_eq!(ev_admin, admin);
+    assert_eq!(ev_ledger_sequence, expected_pause_ledger_sequence);
 
+    let expected_unpause_ledger_sequence = env.ledger().sequence();
     client.unpause();
     let events = env.events().all();
     let last_event = events.last().unwrap();
@@ -1097,7 +1102,35 @@ fn test_pause_unpause_events() {
         Symbol::try_from_val(&env, &last_event.1.get(1).unwrap()).unwrap(),
         symbol_short!("unpaused")
     );
-    assert!(<()>::try_from_val(&env, &last_event.2).is_ok());
+    let (ev_admin, ev_ledger_sequence): (Address, u32) =
+        TryFromVal::try_from_val(&env, &last_event.2).unwrap();
+    assert_eq!(ev_admin, admin);
+    assert_eq!(ev_ledger_sequence, expected_unpause_ledger_sequence);
+}
+
+#[test]
+fn test_update_oracle_emits_old_new_and_admin() {
+    let (env, contract_id, oracle, _, _, _, admin) = setup();
+    let client = EscrowContractClient::new(&env, &contract_id);
+    let new_oracle = Address::generate(&env);
+
+    client.update_oracle(&new_oracle);
+
+    let events = env.events().all();
+    let topics = vec![
+        &env,
+        Symbol::new(&env, "admin").into_val(&env),
+        Symbol::new(&env, "oracle_updated").into_val(&env),
+    ];
+    let matched = events.iter().find(|(_, t, _)| *t == topics);
+    assert!(matched.is_some());
+
+    let (_, _, data) = matched.unwrap();
+    let (ev_old_oracle, ev_new_oracle, ev_admin): (Address, Address, Address) =
+        TryFromVal::try_from_val(&env, &data).unwrap();
+    assert_eq!(ev_old_oracle, oracle);
+    assert_eq!(ev_new_oracle, new_oracle);
+    assert_eq!(ev_admin, admin);
 }
 
 #[test]
