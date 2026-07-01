@@ -101,7 +101,8 @@ pub struct EscrowContract;
 
 #[contractimpl]
 impl EscrowContract {
-    fn is_paused(env: &Env) -> bool {
+    /// Return whether the contract is currently paused.
+    pub fn is_paused(env: Env) -> bool {
         env.storage()
             .instance()
             .get(&DataKey::Paused)
@@ -157,13 +158,52 @@ impl EscrowContract {
             .get(&DataKey::Admin)
             .ok_or(Error::Unauthorized)?;
         admin.require_auth();
+        let old_oracle: Address = env
+            .storage()
+            .instance()
+            .get(&DataKey::Oracle)
+            .ok_or(Error::Unauthorized)?;
         env.storage().instance().set(&DataKey::Oracle, &new_oracle);
         env.storage()
             .instance()
             .extend_ttl(INSTANCE_LIFETIME_THRESHOLD, INSTANCE_BUMP_AMOUNT);
         env.events().publish(
-            (Symbol::new(&env, "admin"), symbol_short!("oracle")),
-            new_oracle,
+            (
+                Symbol::new(&env, "admin"),
+                Symbol::new(&env, "oracle_updated"),
+            ),
+            (old_oracle, new_oracle, admin),
+        );
+        Ok(())
+    }
+
+    /// Rotate the admin address — requires the current admin to authorize.
+    pub fn transfer_admin(env: Env, caller: Address, new_admin: Address) -> Result<(), Error> {
+        let current_admin: Address = env
+            .storage()
+            .instance()
+            .get(&DataKey::Admin)
+            .ok_or(Error::Unauthorized)?;
+
+        if caller != current_admin {
+            return Err(Error::Unauthorized);
+        }
+        caller.require_auth();
+
+        if new_admin.to_string()
+            == String::from_str(
+                &env,
+                "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF",
+            )
+            || new_admin == current_admin
+        {
+            return Err(Error::InvalidAdmin);
+        }
+
+        env.storage().instance().set(&DataKey::Admin, &new_admin);
+        env.events().publish(
+            (Symbol::new(&env, "admin"), symbol_short!("transfer")),
+            (current_admin, new_admin),
         );
         Ok(())
     }
@@ -177,11 +217,10 @@ impl EscrowContract {
             .ok_or(Error::Unauthorized)?;
         admin.require_auth();
         env.storage().instance().set(&DataKey::Paused, &true);
-        env.storage()
-            .instance()
-            .extend_ttl(INSTANCE_LIFETIME_THRESHOLD, INSTANCE_BUMP_AMOUNT);
-        env.events()
-            .publish((Symbol::new(&env, "admin"), symbol_short!("paused")), ());
+        env.events().publish(
+            (Symbol::new(&env, "admin"), symbol_short!("paused")),
+            (admin, env.ledger().sequence()),
+        );
         Ok(())
     }
 
@@ -194,11 +233,10 @@ impl EscrowContract {
             .ok_or(Error::Unauthorized)?;
         admin.require_auth();
         env.storage().instance().set(&DataKey::Paused, &false);
-        env.storage()
-            .instance()
-            .extend_ttl(INSTANCE_LIFETIME_THRESHOLD, INSTANCE_BUMP_AMOUNT);
-        env.events()
-            .publish((Symbol::new(&env, "admin"), symbol_short!("unpaused")), ());
+        env.events().publish(
+            (Symbol::new(&env, "admin"), symbol_short!("unpaused")),
+            (admin, env.ledger().sequence()),
+        );
         Ok(())
     }
 
@@ -214,7 +252,7 @@ impl EscrowContract {
     ) -> Result<u64, Error> {
         player1.require_auth();
 
-        if Self::is_paused(&env) {
+        if Self::is_paused(env.clone()) {
             return Err(Error::ContractPaused);
         }
         if stake_amount < MIN_STAKE {
@@ -236,6 +274,15 @@ impl EscrowContract {
             .has(&DataKey::GameId(game_id.clone()))
         {
             return Err(Error::DuplicateGameId);
+        }
+
+        let stored_token: Address = env
+            .storage()
+            .instance()
+            .get(&DataKey::Token)
+            .ok_or(Error::Unauthorized)?;
+        if token != stored_token {
+            return Err(Error::InvalidToken);
         }
 
         let id: u64 = env
@@ -263,6 +310,7 @@ impl EscrowContract {
             activated_ledger: 0,
             pending_result_ledger: 0,
             pending_winner: OptionalWinner::None,
+            cancelled_ledger: None,
             completed_ledger: None,
             cancelled_ledger: None,
         };
@@ -299,7 +347,7 @@ impl EscrowContract {
     pub fn deposit(env: Env, match_id: u64, player: Address) -> Result<(), Error> {
         player.require_auth();
 
-        if Self::is_paused(&env) {
+        if Self::is_paused(env.clone()) {
             return Err(Error::ContractPaused);
         }
 
@@ -400,7 +448,7 @@ impl EscrowContract {
         winner: Winner,
         caller: Address,
     ) -> Result<(), Error> {
-        if Self::is_paused(&env) {
+        if Self::is_paused(env.clone()) {
             return Err(Error::ContractPaused);
         }
 
@@ -751,7 +799,7 @@ impl EscrowContract {
         }
         caller.require_auth();
 
-        if !Self::is_paused(&env) {
+        if !Self::is_paused(env.clone()) {
             return Err(Error::NotPaused);
         }
 
