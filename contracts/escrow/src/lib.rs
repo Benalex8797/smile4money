@@ -825,12 +825,11 @@ impl EscrowContract {
         Ok(())
     }
 
-    /// Read the registered oracle address.
-    pub fn get_oracle(env: Env) -> Address {
+    /// Return the match_id that registered a given game_id, or None if unregistered.
+    pub fn get_game_id_owner(env: Env, game_id: String) -> Option<u64> {
         env.storage()
-            .instance()
-            .get(&DataKey::Oracle)
-            .expect("oracle not initialized")
+            .persistent()
+            .get(&DataKey::GameId(game_id))
     }
 
     /// Read a match by ID.
