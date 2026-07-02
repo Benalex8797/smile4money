@@ -1,7 +1,12 @@
 extern crate std;
 use super::*;
 use soroban_sdk::{
-    testutils::{storage::Persistent as _, Address as _, Events},
+    testutils::{
+        storage::Instance as _,
+        storage::Persistent as _,
+        Address as _,
+        Events,
+    },
     token::{Client as TokenClient, StellarAssetClient},
     vec, Address, Env, IntoVal, String, Symbol, TryFromVal,
 };
@@ -678,17 +683,19 @@ fn test_double_initialize_fails() {
 }
 
 #[test]
-#[should_panic(expected = "Error(Contract, #10)")]
 fn test_create_match_zero_stake_fails() {
     let (env, contract_id, _oracle, player1, player2, token, _admin) = setup();
     let client = EscrowContractClient::new(&env, &contract_id);
-    client.create_match(
-        &player1,
-        &player2,
-        &0,
-        &token,
-        &String::from_str(&env, "zero_stake"),
-        &Platform::Lichess,
+    assert_eq!(
+        client.try_create_match(
+            &player1,
+            &player2,
+            &0,
+            &token,
+            &String::from_str(&env, "zero_stake"),
+            &Platform::Lichess,
+        ),
+        Err(Ok(Error::StakeTooLow))
     );
 }
 
@@ -1758,7 +1765,7 @@ fn test_create_match_negative_stake_fails() {
             &String::from_str(&env, "neg_stake"),
             &Platform::Lichess,
         ),
-        Err(Ok(Error::InvalidAmount))
+        Err(Ok(Error::StakeTooLow))
     );
 }
 
@@ -2193,4 +2200,65 @@ fn test_create_match_valid_platforms_accepted() {
         &String::from_str(&env, "chessdotcom-game-1"), &Platform::ChessDotCom,
     );
     assert_eq!(client.get_match(&id2).platform, Platform::ChessDotCom);
+}
+
+// Issue #794: get_oracle returns the address passed to initialize
+#[test]
+fn test_get_oracle_returns_initialized_address() {
+    let (env, contract_id, oracle, _player1, _player2, _token, _admin) = setup();
+    let client = EscrowContractClient::new(&env, &contract_id);
+    assert_eq!(client.get_oracle(), oracle);
+}
+
+// Issue #792: stake amount above MAX_STAKE is rejected
+#[test]
+fn test_create_match_stake_too_high_fails() {
+    let (env, contract_id, _oracle, player1, player2, token, _admin) = setup();
+    let client = EscrowContractClient::new(&env, &contract_id);
+    assert_eq!(
+        client.try_create_match(
+            &player1,
+            &player2,
+            &(crate::MAX_STAKE + 1),
+            &token,
+            &String::from_str(&env, "too_high"),
+            &Platform::Lichess,
+        ),
+        Err(Ok(Error::StakeTooHigh))
+    );
+}
+
+// Issue #791: stake amount below MIN_STAKE (e.g. zero) is rejected as StakeTooLow
+#[test]
+fn test_create_match_stake_below_min_fails() {
+    let (env, contract_id, _oracle, player1, player2, token, _admin) = setup();
+    let client = EscrowContractClient::new(&env, &contract_id);
+    assert_eq!(
+        client.try_create_match(
+            &player1,
+            &player2,
+            &0,
+            &token,
+            &String::from_str(&env, "below_min"),
+            &Platform::Lichess,
+        ),
+        Err(Ok(Error::StakeTooLow))
+    );
+}
+
+// Issue #793: instance storage TTL is extended after initialize
+#[test]
+fn test_instance_ttl_extended_on_initialize() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let admin = Address::generate(&env);
+    let oracle = Address::generate(&env);
+    let token_id = env.register_stellar_asset_contract_v2(admin.clone());
+    let token_addr = token_id.address();
+    let contract_id = env.register(EscrowContract, ());
+    let client = EscrowContractClient::new(&env, &contract_id);
+    client.initialize(&oracle, &admin, &token_addr);
+
+    let instance_ttl = env.as_contract(&contract_id, || env.storage().instance().get_ttl());
+    assert!(instance_ttl >= crate::INSTANCE_LIFETIME_THRESHOLD);
 }
