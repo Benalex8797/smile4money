@@ -483,7 +483,7 @@ fn test_deposit_into_completed_match_fails() {
 }
 
 #[test]
-fn test_deposit_into_cancelled_match_fails() {
+fn test_deposit_after_cancel_returns_match_cancelled() {
     let (env, contract_id, _oracle, player1, player2, token, _admin) = setup();
     let client = EscrowContractClient::new(&env, &contract_id);
 
@@ -784,6 +784,29 @@ fn test_create_match_empty_game_id_fails() {
 }
 
 #[test]
+fn test_create_match_wrong_token_fails() {
+    let (env, contract_id, _oracle, player1, player2, _token, admin) = setup();
+    let client = EscrowContractClient::new(&env, &contract_id);
+
+    // Register a different token contract
+    let wrong_token = env
+        .register_stellar_asset_contract_v2(admin.clone())
+        .address();
+
+    assert_eq!(
+        client.try_create_match(
+            &player1,
+            &player2,
+            &100,
+            &wrong_token,
+            &String::from_str(&env, "wrong_token"),
+            &Platform::Lichess,
+        ),
+        Err(Ok(Error::InvalidToken))
+    );
+}
+
+#[test]
 #[should_panic(expected = "Error(Contract, #4)")]
 fn test_unauthorized_player_cannot_cancel() {
     let (env, contract_id, _oracle, player1, player2, token, _admin) = setup();
@@ -838,6 +861,24 @@ fn test_is_funded_false_after_one_deposit() {
     assert!(!client.is_funded(&id));
     client.deposit(&id, &player2);
     assert!(client.is_funded(&id));
+}
+
+// Issue #818: get_escrow_balance returns stake_amount after only one deposit
+#[test]
+fn test_escrow_balance_after_single_deposit() {
+    let (env, contract_id, _oracle, player1, player2, token, _admin) = setup();
+    let client = EscrowContractClient::new(&env, &contract_id);
+
+    let id = client.create_match(
+        &player1,
+        &player2,
+        &100,
+        &token,
+        &String::from_str(&env, "single_deposit"),
+        &Platform::Lichess,
+    );
+    client.deposit(&id, &player1);
+    assert_eq!(client.get_escrow_balance(&id), 100);
 }
 
 #[test]
@@ -1047,10 +1088,29 @@ fn test_non_admin_cannot_unpause() {
 }
 
 #[test]
+fn test_is_paused_returns_false_by_default() {
+    let (env, contract_id, ..) = setup();
+    let client = EscrowContractClient::new(&env, &contract_id);
+    assert!(!client.is_paused());
+}
+
+#[test]
+fn test_is_paused_returns_true_after_pause() {
+    let (env, contract_id, ..) = setup();
+    let client = EscrowContractClient::new(&env, &contract_id);
+    assert!(!client.is_paused());
+    client.pause();
+    assert!(client.is_paused());
+    client.unpause();
+    assert!(!client.is_paused());
+}
+
+#[test]
 fn test_pause_unpause_events() {
-    let (env, contract_id, _, _, _, _, _) = setup();
+    let (env, contract_id, _, _, _, _, admin) = setup();
     let client = EscrowContractClient::new(&env, &contract_id);
 
+    let expected_pause_ledger_sequence = env.ledger().sequence();
     client.pause();
     let events = env.events().all();
     let last_event = events.last().unwrap();
@@ -1064,8 +1124,12 @@ fn test_pause_unpause_events() {
         Symbol::try_from_val(&env, &last_event.1.get(1).unwrap()).unwrap(),
         symbol_short!("paused")
     );
-    assert!(<()>::try_from_val(&env, &last_event.2).is_ok());
+    let (ev_admin, ev_ledger_sequence): (Address, u32) =
+        TryFromVal::try_from_val(&env, &last_event.2).unwrap();
+    assert_eq!(ev_admin, admin);
+    assert_eq!(ev_ledger_sequence, expected_pause_ledger_sequence);
 
+    let expected_unpause_ledger_sequence = env.ledger().sequence();
     client.unpause();
     let events = env.events().all();
     let last_event = events.last().unwrap();
@@ -1079,7 +1143,35 @@ fn test_pause_unpause_events() {
         Symbol::try_from_val(&env, &last_event.1.get(1).unwrap()).unwrap(),
         symbol_short!("unpaused")
     );
-    assert!(<()>::try_from_val(&env, &last_event.2).is_ok());
+    let (ev_admin, ev_ledger_sequence): (Address, u32) =
+        TryFromVal::try_from_val(&env, &last_event.2).unwrap();
+    assert_eq!(ev_admin, admin);
+    assert_eq!(ev_ledger_sequence, expected_unpause_ledger_sequence);
+}
+
+#[test]
+fn test_update_oracle_emits_old_new_and_admin() {
+    let (env, contract_id, oracle, _, _, _, admin) = setup();
+    let client = EscrowContractClient::new(&env, &contract_id);
+    let new_oracle = Address::generate(&env);
+
+    client.update_oracle(&new_oracle);
+
+    let events = env.events().all();
+    let topics = vec![
+        &env,
+        Symbol::new(&env, "admin").into_val(&env),
+        Symbol::new(&env, "oracle_updated").into_val(&env),
+    ];
+    let matched = events.iter().find(|(_, t, _)| *t == topics);
+    assert!(matched.is_some());
+
+    let (_, _, data) = matched.unwrap();
+    let (ev_old_oracle, ev_new_oracle, ev_admin): (Address, Address, Address) =
+        TryFromVal::try_from_val(&env, &data).unwrap();
+    assert_eq!(ev_old_oracle, oracle);
+    assert_eq!(ev_new_oracle, new_oracle);
+    assert_eq!(ev_admin, admin);
 }
 
 #[test]
@@ -1109,6 +1201,29 @@ fn test_non_admin_cannot_update_oracle() {
     }]);
 
     assert!(client.try_update_oracle(&new_oracle).is_err());
+}
+
+#[test]
+fn test_game_id_ttl_set_on_creation() {
+    let (env, contract_id, _oracle, player1, player2, token, _admin) = setup();
+    let client = EscrowContractClient::new(&env, &contract_id);
+
+    let game_id = String::from_str(&env, "ttl_game_id");
+    client.create_match(
+        &player1,
+        &player2,
+        &100,
+        &token,
+        &game_id,
+        &Platform::Lichess,
+    );
+
+    let ttl = env.as_contract(&contract_id, || {
+        env.storage()
+            .persistent()
+            .get_ttl(&DataKey::GameId(game_id.clone()))
+    });
+    assert_eq!(ttl, crate::MATCH_TTL_LEDGERS);
 }
 
 #[test]
@@ -1207,11 +1322,57 @@ fn test_deposit_emits_event() {
     let matched = events.iter().find(|(_, t, _)| *t == deposit_topics);
     assert!(matched.is_some());
     let (_, _, data) = matched.unwrap();
-    let (ev_id, ev_player, ev_amount): (u64, Address, i128) =
+    let (ev_id, ev_player, ev_amount, ev_label): (u64, Address, i128, Symbol) =
         TryFromVal::try_from_val(&env, &data).unwrap();
     assert_eq!(ev_id, id);
     assert_eq!(ev_amount, 100);
     assert!(ev_player == player1 || ev_player == player2);
+    assert!(ev_label == symbol_short!("player1") || ev_label == symbol_short!("player2"));
+}
+
+#[test]
+fn test_deposit_event_player_label() {
+    let (env, contract_id, _oracle, player1, player2, token, _admin) = setup();
+    let client = EscrowContractClient::new(&env, &contract_id);
+
+    let id = client.create_match(
+        &player1,
+        &player2,
+        &100,
+        &token,
+        &String::from_str(&env, "label_ev"),
+        &Platform::Lichess,
+    );
+
+    let deposit_topics = vec![
+        &env,
+        Symbol::new(&env, "match").into_val(&env),
+        soroban_sdk::symbol_short!("deposit").into_val(&env),
+    ];
+
+    client.deposit(&id, &player1);
+    let (_, _, data) = env
+        .events()
+        .all()
+        .iter()
+        .filter(|(_, t, _)| *t == deposit_topics)
+        .last()
+        .unwrap();
+    let (_, _, _, label): (u64, Address, i128, Symbol) =
+        TryFromVal::try_from_val(&env, &data).unwrap();
+    assert_eq!(label, symbol_short!("player1"));
+
+    client.deposit(&id, &player2);
+    let (_, _, data) = env
+        .events()
+        .all()
+        .iter()
+        .filter(|(_, t, _)| *t == deposit_topics)
+        .last()
+        .unwrap();
+    let (_, _, _, label): (u64, Address, i128, Symbol) =
+        TryFromVal::try_from_val(&env, &data).unwrap();
+    assert_eq!(label, symbol_short!("player2"));
 }
 
 #[test]
@@ -2015,30 +2176,21 @@ fn test_emergency_drain_fails_for_non_admin() {
 }
 
 #[test]
-fn test_get_game_id_owner_returns_match_id() {
+fn test_create_match_valid_platforms_accepted() {
+    // Both known Platform variants must be accepted by create_match.
+    // This test verifies the platform validation guard does not reject valid values.
     let (env, contract_id, _oracle, player1, player2, token, _admin) = setup();
     let client = EscrowContractClient::new(&env, &contract_id);
 
-    let game_id = String::from_str(&env, "owner_lookup");
-    let id = client.create_match(
-        &player1,
-        &player2,
-        &100,
-        &token,
-        &game_id,
-        &Platform::Lichess,
+    let id1 = client.create_match(
+        &player1, &player2, &100, &token,
+        &String::from_str(&env, "lichess-game-1"), &Platform::Lichess,
     );
+    assert_eq!(client.get_match(&id1).platform, Platform::Lichess);
 
-    assert_eq!(client.get_game_id_owner(&game_id), Some(id));
-}
-
-#[test]
-fn test_get_game_id_owner_returns_none_for_unknown() {
-    let (env, contract_id, ..) = setup();
-    let client = EscrowContractClient::new(&env, &contract_id);
-
-    assert_eq!(
-        client.get_game_id_owner(&String::from_str(&env, "no_such_game")),
-        None
+    let id2 = client.create_match(
+        &player1, &player2, &100, &token,
+        &String::from_str(&env, "chessdotcom-game-1"), &Platform::ChessDotCom,
     );
+    assert_eq!(client.get_match(&id2).platform, Platform::ChessDotCom);
 }

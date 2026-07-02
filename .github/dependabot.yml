@@ -1,0 +1,58 @@
+version: 2
+
+updates:
+  # ── Issue #892: Cargo (Rust contracts) ───────────────────────────────────
+  - package-ecosystem: "cargo"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    labels:
+      - "dependencies"
+    reviewers:
+      - "obajecollinsmicheal-cmd"
+    commit-message:
+      prefix: "chore"
+      include: "scope"
+
+  # ── Issue #892: npm (frontend) ────────────────────────────────────────────
+  - package-ecosystem: "npm"
+    directory: "/apps/frontend"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    labels:
+      - "dependencies"
+    reviewers:
+      - "obajecollinsmicheal-cmd"
+    commit-message:
+      prefix: "chore"
+      include: "scope"
+
+  # ── npm (backend) ─────────────────────────────────────────────────────────
+  - package-ecosystem: "npm"
+    directory: "/apps/backend"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    labels:
+      - "dependencies"
+    reviewers:
+      - "obajecollinsmicheal-cmd"
+    commit-message:
+      prefix: "chore"
+      include: "scope"
+
+  # ── GitHub Actions ────────────────────────────────────────────────────────
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    labels:
+      - "dependencies"
+    reviewers:
+      - "obajecollinsmicheal-cmd"
+    commit-message:
+      prefix: "chore"
+      include: "scope"

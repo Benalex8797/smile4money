@@ -86,6 +86,42 @@ docs: add contributing guide
 4. Ensure `cargo test` and `cargo clippy -- -D warnings` pass — CI will check both.
 5. Add a brief description of what changed and how it was tested.
 
+## Branch Protection Rules
+
+The `master` branch is protected. The following rules apply to all pull requests:
+
+### Required Status Checks
+
+Every PR must pass these CI jobs before it can be merged:
+
+| Check | CI job |
+|-------|--------|
+| Escrow unit & doc tests | `Escrow Tests` |
+| Oracle unit & doc tests | `Oracle Tests` |
+| Code coverage ≥ 80 % | `Coverage` |
+| Clippy (zero warnings) | `Clippy` |
+| Rust formatting | `Format` |
+| Prettier (frontend) | `Prettier` |
+| WASM build | `Build` |
+| environments.toml validation | `Validate environments.toml` |
+| Frontend type-check / lint / tests | `Frontend` |
+
+### Required Reviewers
+
+At least **1 approving review** from a maintainer is required.
+
+### Merge Policy
+
+- **Squash merge only** — keeps history linear.
+- **No direct pushes** to `master` — always open a PR.
+- Branches must be **up to date** with `master` before the merge button is enabled.
+
+### Setting Up Protections on a Fork
+
+Refer to the [GitHub branch protection documentation](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-protected-branches/about-protected-branches) to mirror these rules on your fork.
+
+---
+
 ## Reporting Issues
 
 Open a GitHub issue with:

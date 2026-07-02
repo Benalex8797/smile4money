@@ -13,6 +13,7 @@ pub enum MatchResult {
 pub struct ResultEntry {
     pub game_id: String,
     pub result: MatchResult,
+    pub submitted_ledger: u32,
 }
 
 #[contracttype]

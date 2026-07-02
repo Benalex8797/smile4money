@@ -22,8 +22,8 @@ import { MongoMemoryServer } from 'mongodb-memory-server';
 import mongoose from 'mongoose';
 
 // ── Adjust these imports to your actual paths ────────────────────────────────
-import { app } from '../../src/app';
-import { Match } from '../../src/models/Match';
+import app from '../../src/app.ts';
+import { Match } from '../../src/models/Match.ts';
 // ─────────────────────────────────────────────────────────────────────────────
 
 // ---------------------------------------------------------------------------

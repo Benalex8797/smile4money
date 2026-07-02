@@ -16,11 +16,18 @@
 //!         cancel_match()    deposit() × 2
 //!                │               │
 //!                ▼               ▼
-//!            Cancelled        Active
+//!            Cancelled        Active ──── claim_timeout() ──► Cancelled
 //!                           (funds held)
 //!                                │
 //!                         submit_result()
 //!                          (oracle only)
+//!                                │
+//!                                ▼
+//!                         PendingResult  ◄── override_result() (admin)
+//!                          (dispute window)
+//!                                │
+//!                       finalize_result()
+//!                     (after window expires)
 //!                                │
 //!                                ▼
 //!                           Completed
@@ -50,8 +57,8 @@ mod errors;
 mod types;
 
 use errors::Error;
-use soroban_sdk::{contract, contractimpl, symbol_short, token, Address, Env, String, Symbol};
-use types::{DataKey, Match, MatchState, Platform, Winner};
+use soroban_sdk::{contract, contractimpl, symbol_short, token, vec, Address, Env, String, Symbol, Vec};
+use types::{DataKey, Match, MatchState, OptionalWinner, Platform, Winner};
 
 /// ~30 days at 5s/ledger. Used as both the TTL threshold and the extend-to value.
 const MATCH_TTL_LEDGERS: u32 = 518_400;
@@ -59,12 +66,23 @@ const MATCH_TTL_LEDGERS: u32 = 518_400;
 /// Maximum allowed byte length for a game_id string.
 const MAX_GAME_ID_LEN: u32 = 64;
 
+/// Dispute window: ~24 hours at 5s/ledger (17 280 ledgers).
+/// After an oracle result is submitted, the admin has this many ledgers to call
+/// `override_result` before the result is finalised and payout is executed.
+const DISPUTE_WINDOW_LEDGERS: u32 = 17_280;
+
+/// Match timeout: ~7 days at 5s/ledger (120 960 ledgers).
+/// If a match has been `Active` for longer than this many ledgers without an oracle
+/// result, either player may call `claim_timeout` to reclaim their stake.
+const TIMEOUT_LEDGERS: u32 = 120_960;
+
 #[contract]
 pub struct EscrowContract;
 
 #[contractimpl]
 impl EscrowContract {
-    fn is_paused(env: &Env) -> bool {
+    /// Return whether the contract is currently paused.
+    pub fn is_paused(env: Env) -> bool {
         env.storage()
             .instance()
             .get(&DataKey::Paused)
@@ -90,12 +108,6 @@ impl EscrowContract {
     /// # Panics
     ///
     /// Panics with `"Contract already initialized"` if called more than once.
-    /// This guard prevents an attacker from overwriting the oracle or admin
-    /// addresses after deployment (see Issue #1 / #110).
-    ///
-    /// # Errors
-    ///
-    /// Panics if `token` is not a valid SEP-41 token contract.
     pub fn initialize(
         env: Env,
         oracle: Address,
@@ -105,7 +117,6 @@ impl EscrowContract {
         if env.storage().instance().has(&DataKey::Oracle) {
             panic!("Contract already initialized");
         }
-        // Validate token by calling a read-only method; panics if not a real token contract
         let token_client = token::Client::new(&env, &token);
         let _ = token_client.decimals();
         env.storage().instance().set(&DataKey::Oracle, &oracle);
@@ -116,7 +127,7 @@ impl EscrowContract {
         Ok(())
     }
 
-    /// Rotate the oracle address — requires the current oracle or admin to authorize.
+    /// Rotate the oracle address — requires the current admin to authorize.
     pub fn update_oracle(env: Env, new_oracle: Address) -> Result<(), Error> {
         let admin: Address = env
             .storage()
@@ -124,10 +135,49 @@ impl EscrowContract {
             .get(&DataKey::Admin)
             .ok_or(Error::Unauthorized)?;
         admin.require_auth();
+        let old_oracle: Address = env
+            .storage()
+            .instance()
+            .get(&DataKey::Oracle)
+            .ok_or(Error::Unauthorized)?;
         env.storage().instance().set(&DataKey::Oracle, &new_oracle);
         env.events().publish(
-            (Symbol::new(&env, "admin"), symbol_short!("oracle")),
-            new_oracle,
+            (
+                Symbol::new(&env, "admin"),
+                Symbol::new(&env, "oracle_updated"),
+            ),
+            (old_oracle, new_oracle, admin),
+        );
+        Ok(())
+    }
+
+    /// Rotate the admin address — requires the current admin to authorize.
+    pub fn transfer_admin(env: Env, caller: Address, new_admin: Address) -> Result<(), Error> {
+        let current_admin: Address = env
+            .storage()
+            .instance()
+            .get(&DataKey::Admin)
+            .ok_or(Error::Unauthorized)?;
+
+        if caller != current_admin {
+            return Err(Error::Unauthorized);
+        }
+        caller.require_auth();
+
+        if new_admin.to_string()
+            == String::from_str(
+                &env,
+                "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF",
+            )
+            || new_admin == current_admin
+        {
+            return Err(Error::InvalidAdmin);
+        }
+
+        env.storage().instance().set(&DataKey::Admin, &new_admin);
+        env.events().publish(
+            (Symbol::new(&env, "admin"), symbol_short!("transfer")),
+            (current_admin, new_admin),
         );
         Ok(())
     }
@@ -141,8 +191,10 @@ impl EscrowContract {
             .ok_or(Error::Unauthorized)?;
         admin.require_auth();
         env.storage().instance().set(&DataKey::Paused, &true);
-        env.events()
-            .publish((Symbol::new(&env, "admin"), symbol_short!("paused")), ());
+        env.events().publish(
+            (Symbol::new(&env, "admin"), symbol_short!("paused")),
+            (admin, env.ledger().sequence()),
+        );
         Ok(())
     }
 
@@ -155,8 +207,10 @@ impl EscrowContract {
             .ok_or(Error::Unauthorized)?;
         admin.require_auth();
         env.storage().instance().set(&DataKey::Paused, &false);
-        env.events()
-            .publish((Symbol::new(&env, "admin"), symbol_short!("unpaused")), ());
+        env.events().publish(
+            (Symbol::new(&env, "admin"), symbol_short!("unpaused")),
+            (admin, env.ledger().sequence()),
+        );
         Ok(())
     }
 
@@ -172,7 +226,7 @@ impl EscrowContract {
     ) -> Result<u64, Error> {
         player1.require_auth();
 
-        if Self::is_paused(&env) {
+        if Self::is_paused(env.clone()) {
             return Err(Error::ContractPaused);
         }
         if stake_amount <= 0 {
@@ -185,13 +239,21 @@ impl EscrowContract {
         if game_id_len == 0 || game_id_len > MAX_GAME_ID_LEN {
             return Err(Error::InvalidGameId);
         }
-        // Reject duplicate game_id — same game cannot be used in multiple matches
         if env
             .storage()
             .persistent()
             .has(&DataKey::GameId(game_id.clone()))
         {
             return Err(Error::DuplicateGameId);
+        }
+
+        let stored_token: Address = env
+            .storage()
+            .instance()
+            .get(&DataKey::Token)
+            .ok_or(Error::Unauthorized)?;
+        if token != stored_token {
+            return Err(Error::InvalidToken);
         }
 
         let id: u64 = env
@@ -204,11 +266,6 @@ impl EscrowContract {
             return Err(Error::AlreadyExists);
         }
 
-        // STATE TRANSITION: (none) → Pending
-        // A brand-new match starts in Pending. No funds are held yet.
-        // Valid next transitions:
-        //   • Pending → Active    : both players call deposit()
-        //   • Pending → Cancelled : either player calls cancel_match()
         let m = Match {
             id,
             player1,
@@ -221,6 +278,11 @@ impl EscrowContract {
             player1_deposited: false,
             player2_deposited: false,
             created_ledger: env.ledger().sequence(),
+            activated_ledger: 0,
+            pending_result_ledger: 0,
+            pending_winner: OptionalWinner::None,
+            cancelled_ledger: None,
+            completed_ledger: None,
         };
 
         env.storage().persistent().set(&DataKey::Match(id), &m);
@@ -229,7 +291,6 @@ impl EscrowContract {
             MATCH_TTL_LEDGERS,
             MATCH_TTL_LEDGERS,
         );
-        // Mark game_id as used
         env.storage()
             .persistent()
             .set(&DataKey::GameId(m.game_id.clone()), &id);
@@ -238,7 +299,6 @@ impl EscrowContract {
             MATCH_TTL_LEDGERS,
             MATCH_TTL_LEDGERS,
         );
-        // Guard against u64 overflow in release mode where wrapping would occur silently
         let next_id = id.checked_add(1).ok_or(Error::Overflow)?;
         env.storage().instance().set(&DataKey::MatchCount, &next_id);
 
@@ -251,17 +311,10 @@ impl EscrowContract {
     }
 
     /// Player deposits their stake into escrow.
-    ///
-    /// # SAFETY: no re-entrancy risk
-    /// Soroban's runtime prevents contract re-entry during execution. All state
-    /// changes (marking the player as deposited, updating match state) occur
-    /// after the external token transfer call — following the checks-effects-
-    /// interactions pattern. Even if the token contract attempted a re-entrant
-    /// call, the Soroban SDK would reject it at the host function level.
     pub fn deposit(env: Env, match_id: u64, player: Address) -> Result<(), Error> {
         player.require_auth();
 
-        if Self::is_paused(&env) {
+        if Self::is_paused(env.clone()) {
             return Err(Error::ContractPaused);
         }
 
@@ -318,21 +371,23 @@ impl EscrowContract {
 
         if m.player1_deposited && m.player2_deposited {
             // STATE TRANSITION: Pending → Active
-            // Both players have now deposited their stake. The game is in progress.
-            // Valid next transitions:
-            //   • Active → Completed : oracle calls submit_result()
-            // Note: cancel_match() is rejected once Active; the match must be resolved
-            //       via submit_result().
+            // Record the ledger at which the match became active for timeout tracking.
             m.state = MatchState::Active;
+            m.activated_ledger = env.ledger().sequence();
             env.events().publish(
                 (Symbol::new(&env, "match"), symbol_short!("activated")),
                 match_id,
             );
         }
 
+        let player_label = if is_p1 {
+            symbol_short!("player1")
+        } else {
+            symbol_short!("player2")
+        };
         env.events().publish(
             (Symbol::new(&env, "match"), symbol_short!("deposit")),
-            (match_id, player, m.stake_amount),
+            (match_id, player, m.stake_amount, player_label),
         );
 
         env.storage()
@@ -347,15 +402,12 @@ impl EscrowContract {
         Ok(())
     }
 
-    /// Oracle submits the verified match result and triggers payout.
-    /// `game_id` must match the game_id stored in the match to prevent
-    /// cross-match result injection.
+    /// Oracle submits the verified match result. Transitions match to `PendingResult`
+    /// and starts the dispute window. Payout is NOT executed immediately — call
+    /// `finalize_result` after `DISPUTE_WINDOW_LEDGERS` to execute the payout.
     ///
-    /// # SAFETY: no re-entrancy risk
-    /// Soroban's runtime prevents contract re-entry during execution. The payout
-    /// transfer(s) are the final interactions before the state is committed as
-    /// Completed. All validation (caller auth, game_id match, state check) occurs
-    /// before any external call, following the checks-effects-interactions pattern.
+    /// `game_id` must match the game_id stored in the match to prevent cross-match
+    /// result injection.
     pub fn submit_result(
         env: Env,
         match_id: u64,
@@ -363,7 +415,7 @@ impl EscrowContract {
         winner: Winner,
         caller: Address,
     ) -> Result<(), Error> {
-        if Self::is_paused(&env) {
+        if Self::is_paused(env.clone()) {
             return Err(Error::ContractPaused);
         }
 
@@ -386,7 +438,6 @@ impl EscrowContract {
             .get(&DataKey::Match(match_id))
             .ok_or(Error::MatchNotFound)?;
 
-        // Verify the oracle is submitting a result for the correct game
         if m.game_id != game_id {
             return Err(Error::GameIdMismatch);
         }
@@ -399,6 +450,129 @@ impl EscrowContract {
             return Err(Error::NotFunded);
         }
 
+        // STATE TRANSITION: Active → PendingResult
+        // The oracle's result enters a dispute window. No payout yet.
+        m.state = MatchState::PendingResult;
+        m.pending_result_ledger = env.ledger().sequence();
+        m.pending_winner = OptionalWinner::Some(winner.clone());
+
+        env.storage()
+            .persistent()
+            .set(&DataKey::Match(match_id), &m);
+        env.storage().persistent().extend_ttl(
+            &DataKey::Match(match_id),
+            MATCH_TTL_LEDGERS,
+            MATCH_TTL_LEDGERS,
+        );
+
+        env.events().publish(
+            (Symbol::new(&env, "oracle"), symbol_short!("pending")),
+            (match_id, winner, m.pending_result_ledger),
+        );
+
+        Ok(())
+    }
+
+    /// Admin overrides an oracle result during the dispute window.
+    ///
+    /// Can only be called while the match is in `PendingResult` state and before
+    /// `DISPUTE_WINDOW_LEDGERS` have elapsed since the result was submitted.
+    ///
+    /// # Errors
+    ///
+    /// * [`Error::Unauthorized`]      — caller is not the admin.
+    /// * [`Error::InvalidState`]      — match is not in `PendingResult` state.
+    /// * [`Error::DisputeWindowActive`] — dispute window has already expired; call
+    ///   `finalize_result` instead.
+    pub fn override_result(
+        env: Env,
+        match_id: u64,
+        new_winner: Winner,
+        caller: Address,
+    ) -> Result<(), Error> {
+        let admin: Address = env
+            .storage()
+            .instance()
+            .get(&DataKey::Admin)
+            .ok_or(Error::Unauthorized)?;
+
+        if caller != admin {
+            return Err(Error::Unauthorized);
+        }
+        caller.require_auth();
+
+        Self::validate_match_id(&env, match_id)?;
+
+        let mut m: Match = env
+            .storage()
+            .persistent()
+            .get(&DataKey::Match(match_id))
+            .ok_or(Error::MatchNotFound)?;
+
+        if m.state != MatchState::PendingResult {
+            return Err(Error::InvalidState);
+        }
+
+        // Ensure the dispute window has not yet expired; after expiry the result
+        // is final and must be processed via finalize_result.
+        let current = env.ledger().sequence();
+        if current > m.pending_result_ledger + DISPUTE_WINDOW_LEDGERS {
+            return Err(Error::DisputeWindowActive);
+        }
+
+        let old_winner = m.pending_winner.clone();
+        m.pending_winner = OptionalWinner::Some(new_winner.clone());
+
+        env.storage()
+            .persistent()
+            .set(&DataKey::Match(match_id), &m);
+        env.storage().persistent().extend_ttl(
+            &DataKey::Match(match_id),
+            MATCH_TTL_LEDGERS,
+            MATCH_TTL_LEDGERS,
+        );
+
+        env.events().publish(
+            (Symbol::new(&env, "oracle"), symbol_short!("overridn")),
+            (match_id, old_winner, new_winner),
+        );
+
+        Ok(())
+    }
+
+    /// Finalize a pending result and execute payout after the dispute window has expired.
+    ///
+    /// Can be called by anyone once `DISPUTE_WINDOW_LEDGERS` have elapsed since the oracle
+    /// submitted the result. Executes the payout based on `pending_winner` and transitions
+    /// the match to `Completed`.
+    ///
+    /// # Errors
+    ///
+    /// * [`Error::InvalidState`]        — match is not in `PendingResult` state.
+    /// * [`Error::DisputeWindowActive`] — dispute window has not yet expired.
+    pub fn finalize_result(env: Env, match_id: u64) -> Result<(), Error> {
+        Self::validate_match_id(&env, match_id)?;
+
+        let mut m: Match = env
+            .storage()
+            .persistent()
+            .get(&DataKey::Match(match_id))
+            .ok_or(Error::MatchNotFound)?;
+
+        if m.state != MatchState::PendingResult {
+            return Err(Error::InvalidState);
+        }
+
+        let current = env.ledger().sequence();
+        if current <= m.pending_result_ledger + DISPUTE_WINDOW_LEDGERS {
+            return Err(Error::DisputeWindowActive);
+        }
+
+        let winner = match m.pending_winner.clone() {
+            OptionalWinner::Some(w) => w,
+            OptionalWinner::None => return Err(Error::InvalidState),
+        };
+
         let client = token::Client::new(&env, &m.token);
 
         let payout_amount: i128 = match winner {
@@ -406,7 +580,7 @@ impl EscrowContract {
             _ => m.stake_amount * 2,
         };
 
-        match winner {
+        match winner.clone() {
             Winner::Player1 => {
                 client.transfer(&env.current_contract_address(), &m.player1, &payout_amount)
             }
@@ -419,10 +593,9 @@ impl EscrowContract {
             }
         }
 
-        // STATE TRANSITION: Active → Completed
-        // The oracle has submitted a verified result and the payout has been executed.
-        // This is a terminal state — no further transitions are possible.
+        // STATE TRANSITION: PendingResult → Completed
         m.state = MatchState::Completed;
+        m.completed_ledger = Some(env.ledger().sequence());
         env.storage()
             .persistent()
             .set(&DataKey::Match(match_id), &m);
@@ -432,9 +605,79 @@ impl EscrowContract {
             MATCH_TTL_LEDGERS,
         );
 
-        let topics = (Symbol::new(&env, "match"), symbol_short!("completed"));
-        env.events()
-            .publish(topics, (match_id, winner, payout_amount));
+        env.events().publish(
+            (Symbol::new(&env, "match"), symbol_short!("completed")),
+            (match_id, winner, payout_amount),
+        );
+
+        Ok(())
+    }
+
+    /// Reclaim funds when the oracle never submits a result within `TIMEOUT_LEDGERS`.
+    ///
+    /// Either `player1` or `player2` may call this function if the match has been in the
+    /// `Active` state for longer than `TIMEOUT_LEDGERS` (~7 days) without an oracle result.
+    /// Both players receive their original `stake_amount` back. The match transitions to
+    /// `Cancelled`.
+    ///
+    /// # Arguments
+    ///
+    /// * `match_id` — The match to reclaim funds from.
+    /// * `caller`   — Must be `player1` or `player2`; must authorize the call.
+    ///
+    /// # Errors
+    ///
+    /// * [`Error::Unauthorized`]  — caller is neither player.
+    /// * [`Error::InvalidState`]  — match is not `Active`.
+    /// * [`Error::MatchTimedOut`] — not enough ledgers have passed yet (too early to claim).
+    pub fn claim_timeout(env: Env, match_id: u64, caller: Address) -> Result<(), Error> {
+        caller.require_auth();
+
+        Self::validate_match_id(&env, match_id)?;
+
+        let mut m: Match = env
+            .storage()
+            .persistent()
+            .get(&DataKey::Match(match_id))
+            .ok_or(Error::MatchNotFound)?;
+
+        if m.state != MatchState::Active {
+            return Err(Error::InvalidState);
+        }
+
+        let is_player = caller == m.player1 || caller == m.player2;
+        if !is_player {
+            return Err(Error::Unauthorized);
+        }
+
+        let current = env.ledger().sequence();
+        if current <= m.activated_ledger + TIMEOUT_LEDGERS {
+            // Timeout period has not elapsed yet — reject with MatchTimedOut reused
+            // as "too early". We return MatchTimedOut here to keep error codes minimal;
+            // callers should interpret it as "timeout not yet reached".
+            return Err(Error::MatchTimedOut);
+        }
+
+        let client = token::Client::new(&env, &m.token);
+        // Refund both players their original stake
+        client.transfer(&env.current_contract_address(), &m.player1, &m.stake_amount);
+        client.transfer(&env.current_contract_address(), &m.player2, &m.stake_amount);
+
+        // STATE TRANSITION: Active → Cancelled (via timeout)
+        m.state = MatchState::Cancelled;
+        env.storage()
+            .persistent()
+            .set(&DataKey::Match(match_id), &m);
+        env.storage().persistent().extend_ttl(
+            &DataKey::Match(match_id),
+            MATCH_TTL_LEDGERS,
+            MATCH_TTL_LEDGERS,
+        );
+
+        env.events().publish(
+            (Symbol::new(&env, "match"), symbol_short!("timeout")),
+            (match_id, caller),
+        );
 
         Ok(())
     }
@@ -467,8 +710,6 @@ impl EscrowContract {
             return Err(Error::Unauthorized);
         }
 
-        // When both players have deposited, both must consent to cancellation
-        // to prevent one player from unilaterally withdrawing the other's funds.
         if m.player1_deposited && m.player2_deposited {
             m.player1.require_auth();
             m.player2.require_auth();
@@ -477,18 +718,24 @@ impl EscrowContract {
         }
 
         let client = token::Client::new(&env, &m.token);
+        let player1_refund: i128 = if m.player1_deposited { m.stake_amount } else { 0 };
+        let player2_refund: i128 = if m.player2_deposited { m.stake_amount } else { 0 };
         if m.player1_deposited {
-            client.transfer(&env.current_contract_address(), &m.player1, &m.stake_amount);
+            client
+                .try_transfer(&env.current_contract_address(), &m.player1, &m.stake_amount)
+                .map_err(|_| Error::TransferFailed)?
+                .map_err(|_| Error::TransferFailed)?;
         }
         if m.player2_deposited {
-            client.transfer(&env.current_contract_address(), &m.player2, &m.stake_amount);
+            client
+                .try_transfer(&env.current_contract_address(), &m.player2, &m.stake_amount)
+                .map_err(|_| Error::TransferFailed)?
+                .map_err(|_| Error::TransferFailed)?;
         }
 
         // STATE TRANSITION: Pending → Cancelled
-        // Either player may cancel before both deposits are made. Any deposit already
-        // transferred is refunded above. This is a terminal state — no further
-        // transitions are possible.
         m.state = MatchState::Cancelled;
+        m.cancelled_ledger = Some(env.ledger().sequence());
         env.storage()
             .persistent()
             .set(&DataKey::Match(match_id), &m);
@@ -500,22 +747,13 @@ impl EscrowContract {
 
         env.events().publish(
             (Symbol::new(&env, "match"), symbol_short!("cancelled")),
-            (match_id, caller),
+            (match_id, caller, player1_refund, player2_refund),
         );
 
         Ok(())
     }
 
     /// Drain all token holdings to a safe address — admin only, requires contract to be paused.
-    ///
-    /// This is an emergency recovery function for critical exploit scenarios. It transfers
-    /// the entire contract token balance to `to` and emits an `admin:emergency_drain` event.
-    ///
-    /// # Future enhancements
-    /// - **Time-lock**: require a delay (e.g., 24 h) between `pause()` and `emergency_drain()`
-    ///   so players can challenge a malicious admin action.
-    /// - **Multi-sig**: require M-of-N admin signatures to prevent a single compromised key
-    ///   from draining funds.
     pub fn emergency_drain(env: Env, to: Address, caller: Address) -> Result<(), Error> {
         let admin: Address = env
             .storage()
@@ -528,7 +766,7 @@ impl EscrowContract {
         }
         caller.require_auth();
 
-        if !Self::is_paused(&env) {
+        if !Self::is_paused(env.clone()) {
             return Err(Error::NotPaused);
         }
 
@@ -590,13 +828,31 @@ impl EscrowContract {
         if m.state == MatchState::Completed || m.state == MatchState::Cancelled {
             return Ok(0);
         }
-        // Explicit logic avoids fragile bool-to-integer casting
         let deposited: i128 = match (m.player1_deposited, m.player2_deposited) {
             (true, true) => 2,
             (true, false) | (false, true) => 1,
             (false, false) => 0,
         };
         Ok(deposited * m.stake_amount)
+    }
+
+    /// Return a page of match IDs in the range `[start, start + limit)`.
+    ///
+    /// `limit` is capped at 100. IDs beyond the current match count are silently
+    /// omitted, so callers can detect the last page when the returned slice is
+    /// shorter than the requested `limit`.
+    pub fn list_matches(env: Env, start: u64, limit: u32) -> Vec<u64> {
+        const MAX_LIMIT: u32 = 100;
+        let limit = limit.min(MAX_LIMIT);
+        let count = Self::get_match_count(&env);
+        let mut ids: Vec<u64> = vec![&env];
+        let end = start.saturating_add(limit as u64).min(count);
+        let mut i = start;
+        while i < end {
+            ids.push_back(i);
+            i += 1;
+        }
+        ids
     }
 }
 
