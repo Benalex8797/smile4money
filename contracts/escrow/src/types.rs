@@ -14,9 +14,16 @@ use soroban_sdk::{contracttype, Address, String};
 ///         cancel_match    both deposits
 ///              │               │
 ///              ▼               ▼
-///          Cancelled        Active
+///          Cancelled        Active ──── (timeout) ──► Cancelled
 ///                              │
 ///                        submit_result
+///                         (oracle only)
+///                              │
+///                              ▼
+///                        PendingResult  ◄── override_result (admin)
+///                              │
+///                     (dispute window expires)
+///                       finalize_result
 ///                              │
 ///                              ▼
 ///                          Completed
@@ -42,29 +49,43 @@ pub enum MatchState {
     ///
     /// Funds are held in escrow by the contract. The only way to leave this
     /// state is for the trusted oracle to call
-    /// [`submit_result`](crate::EscrowContract::submit_result).
+    /// [`submit_result`](crate::EscrowContract::submit_result) or for a
+    /// player to call [`claim_timeout`](crate::EscrowContract::claim_timeout)
+    /// after `TIMEOUT_LEDGERS` have elapsed since activation.
     ///
     /// Valid transitions from `Active`:
-    /// - → [`Completed`](MatchState::Completed): oracle submits a verified
-    ///   result and the payout is executed.
-    ///
-    /// Note: [`cancel_match`](crate::EscrowContract::cancel_match) is **not**
-    /// permitted once a match is `Active`.
+    /// - → [`PendingResult`](MatchState::PendingResult): oracle submits a result;
+    ///   dispute window begins.
+    /// - → [`Cancelled`](MatchState::Cancelled): either player calls
+    ///   `claim_timeout` after the match has been active for `TIMEOUT_LEDGERS`.
     Active,
 
-    /// The oracle has submitted a verified result and the payout has been
-    /// executed. This is a **terminal state**.
+    /// The oracle has submitted a result but the dispute window has not yet
+    /// expired. The admin may call
+    /// [`override_result`](crate::EscrowContract::override_result) to correct
+    /// an incorrect outcome.
+    ///
+    /// Valid transitions from `PendingResult`:
+    /// - → [`Completed`](MatchState::Completed): anyone calls
+    ///   [`finalize_result`](crate::EscrowContract::finalize_result) after
+    ///   `DISPUTE_WINDOW_LEDGERS` have elapsed since the result was submitted.
+    PendingResult,
+
+    /// The oracle result has been finalized after the dispute window and the
+    /// payout has been executed. This is a **terminal state**.
     ///
     /// The escrowed funds have been transferred to the winner (or split
     /// equally on a draw). No further operations are possible on this match.
     Completed,
 
-    /// The match was cancelled before both players deposited. This is a
-    /// **terminal state**.
+    /// The match was cancelled before both players deposited, or timed out
+    /// while `Active`. This is a **terminal state**.
     ///
     /// Any stake that had already been deposited is refunded to the
     /// respective player at the time of cancellation. A match can only be
-    /// cancelled while in the [`Pending`](MatchState::Pending) state.
+    /// cancelled while in the [`Pending`](MatchState::Pending) state (via
+    /// `cancel_match`) or timed out from the [`Active`](MatchState::Active)
+    /// state (via `claim_timeout`).
     Cancelled,
 }
 
@@ -110,6 +131,18 @@ pub enum Winner {
     /// Each player's original `stake_amount` is returned to them. No funds
     /// change hands net of the round-trip.
     Draw,
+}
+
+/// A contract-type-compatible representation of `Option<Winner>`.
+///
+/// Soroban `#[contracttype]` structs cannot use `Option<T>` when `T` is itself
+/// a `#[contracttype]` enum, because the derive macro for `T` does not generate
+/// `From<T> for ScVal`. This wrapper enum is used as a drop-in replacement.
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum OptionalWinner {
+    None,
+    Some(Winner),
 }
 
 /// All data stored for a single chess escrow match.
@@ -200,6 +233,45 @@ pub struct Match {
     /// off-chain auditing. At ~5 seconds per ledger, `MATCH_TTL_LEDGERS`
     /// (~518 400 ledgers) corresponds to roughly 30 days.
     pub created_ledger: u32,
+
+    /// The ledger sequence number at which this match transitioned to `Active`.
+    ///
+    /// Recorded when both players have deposited and the match becomes `Active`.
+    /// Used by [`claim_timeout`](crate::EscrowContract::claim_timeout) to verify
+    /// that `TIMEOUT_LEDGERS` have elapsed without an oracle result.
+    /// `0` when the match has not yet become `Active`.
+    pub activated_ledger: u32,
+
+    /// The ledger sequence number at which the oracle submitted a result
+    /// (i.e. when the match transitioned to `PendingResult`).
+    ///
+    /// Used by [`finalize_result`](crate::EscrowContract::finalize_result) to
+    /// check whether `DISPUTE_WINDOW_LEDGERS` have elapsed. `0` when no result
+    /// has been submitted yet.
+    pub pending_result_ledger: u32,
+
+    /// The winner reported by the oracle, held in limbo during the dispute window.
+    ///
+    /// Set when the match enters `PendingResult` state. May be overridden by the
+    /// admin via [`override_result`](crate::EscrowContract::override_result).
+    /// Used by [`finalize_result`](crate::EscrowContract::finalize_result) to
+    /// determine the payout. `None` when no result is pending.
+    pub pending_winner: OptionalWinner,
+
+    /// The ledger sequence number at which this match was cancelled.
+    ///
+    /// Set to `Some(env.ledger().sequence())` by
+    /// [`cancel_match`](crate::EscrowContract::cancel_match) when the match
+    /// transitions to [`MatchState::Cancelled`]. `None` for all other states.
+    pub cancelled_ledger: Option<u32>,
+
+    /// The ledger sequence number at which this match was completed and the
+    /// payout was executed.
+    ///
+    /// Set to `Some(env.ledger().sequence())` by
+    /// [`finalize_result`](crate::EscrowContract::finalize_result) when the match
+    /// transitions to [`MatchState::Completed`]. `None` for all other states.
+    pub completed_ledger: Option<u32>,
 }
 
 /// Storage keys used by the escrow contract.

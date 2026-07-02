@@ -255,6 +255,34 @@ No single party can unilaterally steal funds. The escrow contract enforces all p
 
 ---
 
+## Re-entrancy Analysis
+
+### Soroban's Single-Execution Model
+
+Soroban (Stellar's smart-contract platform) executes each contract invocation atomically within a single host frame. Unlike EVM, Soroban does **not** allow a called contract to invoke the caller back during the same transaction. The host enforces a strict call-stack depth limit and does not yield control mid-execution, making traditional re-entrancy attacks structurally impossible.
+
+### Cross-Contract Call Patterns in This Codebase
+
+| Contract | Function | Cross-contract call | Re-entrancy possible? |
+|----------|----------|--------------------|-----------------------|
+| Escrow | `deposit` | `token::try_transfer` (player → contract) | No — token cannot call back into escrow |
+| Escrow | `submit_result` | `token::transfer` (contract → winner) | No — payout is the last action; state is written before the call |
+| Escrow | `cancel_match` / `emergency_drain` | `token::transfer` (contract → player) | No — same reason as above |
+| Oracle | `withdraw` | `token::try_transfer` (contract → recipient) | No — Soroban's model prevents callbacks |
+
+### Checks-Effects-Interactions
+
+Both contracts follow the checks-effects-interactions pattern as an additional layer of defence:
+
+- State is validated and updated **before** any `token::transfer` or `token::try_transfer` call.
+- Inline `// SAFETY:` comments in `submit_result` (oracle) and `withdraw` (oracle) document this reasoning at the call site.
+
+### Conclusion
+
+No re-entrancy vectors exist in this codebase. The Soroban execution model provides structural prevention, and the code additionally follows checks-effects-interactions ordering.
+
+---
+
 ## Known Limitations
 
 - The oracle service is a centralised component. A compromised oracle key can submit incorrect results. Key rotation via `update_oracle` mitigates this without redeployment.
@@ -276,6 +304,22 @@ No single party can unilaterally steal funds. The escrow contract enforces all p
 | Date | Reviewer | Sign-off |
 |------|----------|----------|
 | 2026-06-24 | Internal review | ✅ Approved — STRIDE analysis complete, all identified threats have documented mitigations or accepted risk. |
+
+## Secrets Management
+
+### ORACLE_SECRET_KEY
+
+The oracle service signs Stellar transactions using a private key loaded exclusively from the `ORACLE_SECRET_KEY` environment variable. This key must **never** be hardcoded in source code or committed to the repository.
+
+| Variable | Description | Required |
+|----------|-------------|----------|
+| `ORACLE_SECRET_KEY` | Stellar secret key (S…) used by the oracle to sign result submissions | Yes |
+| `LICHESS_API_TOKEN` | Lichess API token for fetching game results | Yes |
+| `CHESSDOTCOM_API_KEY` | Chess.com API key for fetching game results | Yes |
+
+The oracle service validates all required environment variables at startup and exits with a fatal log message if any are missing.
+
+**Production guidance**: Store `ORACLE_SECRET_KEY` in a secrets manager (e.g., AWS Secrets Manager, HashiCorp Vault) and inject it at runtime. Rotate the key via `update_oracle` on the escrow contract after rotation.
 
 ## Reporting Vulnerabilities
 

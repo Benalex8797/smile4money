@@ -113,6 +113,43 @@ git ls-remote https://github.com/<owner>/<repo>.git refs/tags/<tag>
 
 ---
 
+## Branch Protection Rules
+
+The `master` branch is protected. The following rules are enforced for all pull requests:
+
+### Required Status Checks
+
+All of the jobs below must pass before a PR can be merged:
+
+| Check | Job name in CI |
+|-------|---------------|
+| Escrow unit & doc tests | `Escrow Tests` |
+| Oracle unit & doc tests | `Oracle Tests` |
+| Code coverage ≥ 80 % | `Coverage` |
+| Clippy (zero warnings) | `Clippy` |
+| Rust formatting | `Format` |
+| Prettier (frontend) | `Prettier` |
+| WASM build | `Build` |
+| environments.toml valid | `Validate environments.toml` |
+| Frontend type-check / lint / tests | `Frontend` |
+
+### Required Reviewers
+
+At least **1 approving review** from a repository maintainer is required before merge.
+
+### Merge Policy
+
+- Only **squash merges** are allowed — this keeps the commit history linear and readable.
+- Direct pushes to `master` are **blocked** for all contributors, including maintainers.
+- Branches must be **up to date** with `master` before merging.
+
+### Setting Up Branch Protection on a Fork
+
+If you are working on a personal fork, you can replicate these rules by following the
+[GitHub branch protection documentation](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-protected-branches/about-protected-branches).
+
+---
+
 ## Reporting Issues
 
 Open a GitHub issue with:
