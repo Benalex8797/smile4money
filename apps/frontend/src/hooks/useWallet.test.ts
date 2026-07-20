@@ -25,7 +25,10 @@ describe('useWallet', () => {
   it('connects wallet and returns address', async () => {
     mockStellar.isConnected.mockResolvedValue({ isConnected: true });
     mockStellar.getPublicKey.mockResolvedValue('GBTEST123');
-    mockStellar.getNetwork.mockResolvedValue({ network: 'testnet', networkPassphrase: 'Test SDF Network ; September 2015' });
+    mockStellar.getNetwork.mockResolvedValue({
+      network: 'testnet',
+      networkPassphrase: 'Test SDF Network ; September 2015',
+    });
     mockStellar.setAllowed.mockResolvedValue({});
 
     const { result } = renderHook(() => useWallet());
@@ -65,7 +68,9 @@ describe('useWallet', () => {
 
   it('permission denied returns error state', async () => {
     mockStellar.isConnected.mockResolvedValue({ isConnected: false });
-    mockStellar.setAllowed.mockResolvedValue({ error: { code: 4001, message: 'User rejected request' } });
+    mockStellar.setAllowed.mockResolvedValue({
+      error: { code: 4001, message: 'User rejected request' },
+    });
 
     const { result } = renderHook(() => useWallet());
 

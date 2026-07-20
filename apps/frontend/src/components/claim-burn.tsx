@@ -125,7 +125,9 @@ export function ClaimBurn({
       setStatus('success');
       setInputAmount('');
       toast.success(
-        mode === 'claim' ? `${tokenSymbol} claimed successfully!` : `${tokenSymbol} burned successfully!`,
+        mode === 'claim'
+          ? `${tokenSymbol} claimed successfully!`
+          : `${tokenSymbol} burned successfully!`,
         hash ? `Transaction hash: ${hash}` : undefined,
       );
     } catch (err) {
@@ -150,7 +152,10 @@ export function ClaimBurn({
 
   if (walletState === 'checking' || walletState === 'connecting') {
     return (
-      <div className="dark:bg-slate-900 flex flex-col items-center justify-center rounded-xl bg-slate-50 p-10 text-center" data-testid="wallet-connecting">
+      <div
+        className="dark:bg-slate-900 flex flex-col items-center justify-center rounded-xl bg-slate-50 p-10 text-center"
+        data-testid="wallet-connecting"
+      >
         <div className="mb-4 h-8 w-8 animate-spin rounded-full border-4 border-slate-200 border-t-violet-600 dark:border-slate-700 dark:border-t-violet-400" />
         <p className="dark:text-slate-400 text-sm text-slate-500">Connecting to wallet&hellip;</p>
       </div>
@@ -159,9 +164,14 @@ export function ClaimBurn({
 
   if (walletState === 'notInstalled') {
     return (
-      <div className="dark:bg-slate-900 flex flex-col items-center justify-center rounded-xl bg-slate-50 p-10 text-center" data-testid="wallet-not-installed">
+      <div
+        className="dark:bg-slate-900 flex flex-col items-center justify-center rounded-xl bg-slate-50 p-10 text-center"
+        data-testid="wallet-not-installed"
+      >
         <span className="mb-4 text-4xl">⚠️</span>
-        <h3 className="dark:text-slate-100 mb-2 text-lg font-semibold text-slate-900">Freighter Not Found</h3>
+        <h3 className="dark:text-slate-100 mb-2 text-lg font-semibold text-slate-900">
+          Freighter Not Found
+        </h3>
         <p className="dark:text-slate-400 mb-4 text-sm text-slate-500">
           Please install the{' '}
           <a
@@ -245,9 +255,14 @@ export function ClaimBurn({
 
   if (walletState === 'wrongNetwork') {
     return (
-      <div className="dark:bg-slate-900 flex flex-col items-center justify-center rounded-xl bg-slate-50 p-10 text-center" data-testid="wallet-wrong-network">
+      <div
+        className="dark:bg-slate-900 flex flex-col items-center justify-center rounded-xl bg-slate-50 p-10 text-center"
+        data-testid="wallet-wrong-network"
+      >
         <span className="mb-4 text-4xl">🌐</span>
-        <h3 className="dark:text-slate-100 mb-2 text-lg font-semibold text-slate-900">Wrong Network</h3>
+        <h3 className="dark:text-slate-100 mb-2 text-lg font-semibold text-slate-900">
+          Wrong Network
+        </h3>
         <p className="dark:text-slate-400 mb-4 text-sm text-slate-500">
           Please switch your Freighter wallet to{' '}
           <strong className="dark:text-slate-200 text-slate-700">{expectedNetwork}</strong>.
@@ -266,9 +281,14 @@ export function ClaimBurn({
 
   if (walletState === 'error') {
     return (
-      <div className="dark:bg-slate-900 flex flex-col items-center justify-center rounded-xl bg-slate-50 p-10 text-center" data-testid="wallet-error">
+      <div
+        className="dark:bg-slate-900 flex flex-col items-center justify-center rounded-xl bg-slate-50 p-10 text-center"
+        data-testid="wallet-error"
+      >
         <span className="mb-4 text-4xl">⚠️</span>
-        <h3 className="dark:text-slate-100 mb-2 text-lg font-semibold text-slate-900">Connection Error</h3>
+        <h3 className="dark:text-slate-100 mb-2 text-lg font-semibold text-slate-900">
+          Connection Error
+        </h3>
         <p className="dark:text-slate-400 mb-4 text-sm text-slate-500">
           An error occurred while connecting to your wallet.
         </p>
@@ -287,11 +307,20 @@ export function ClaimBurn({
   // ── Connected UI ──────────────────────────────────────────────────
 
   return (
-    <div className="dark:bg-slate-900 dark:border-slate-700 w-full max-w-md rounded-xl border border-slate-200 bg-white p-6 shadow-sm" data-testid="claim-burn">
-      <h2 className="dark:text-slate-100 mb-5 text-center text-xl font-semibold text-slate-900">Claim &amp; Burn</h2>
+    <div
+      className="dark:bg-slate-900 dark:border-slate-700 w-full max-w-md rounded-xl border border-slate-200 bg-white p-6 shadow-sm"
+      data-testid="claim-burn"
+    >
+      <h2 className="dark:text-slate-100 mb-5 text-center text-xl font-semibold text-slate-900">
+        Claim &amp; Burn
+      </h2>
 
       {/* Mode toggle */}
-      <div className="dark:bg-slate-800 mb-5 flex rounded-lg bg-slate-100 p-1" role="group" aria-label="Select mode">
+      <div
+        className="dark:bg-slate-800 mb-5 flex rounded-lg bg-slate-100 p-1"
+        role="group"
+        aria-label="Select mode"
+      >
         <button
           type="button"
           className={`toggle-btn${mode === 'claim' ? ' active' : ''} focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2`}
@@ -316,7 +345,10 @@ export function ClaimBurn({
 
       {/* Wallet info */}
       {publicKey && (
-        <div className="dark:bg-slate-800 dark:border-slate-700 mb-4 rounded-lg border border-emerald-100 bg-emerald-50 p-3 text-sm" data-testid="wallet-info">
+        <div
+          className="dark:bg-slate-800 dark:border-slate-700 mb-4 rounded-lg border border-emerald-100 bg-emerald-50 p-3 text-sm"
+          data-testid="wallet-info"
+        >
           <div className="flex flex-wrap items-center gap-2">
             <span className="dark:text-slate-400 font-medium text-slate-600">Connected</span>
             <span className="dark:text-emerald-400 font-mono text-emerald-700 font-semibold">
@@ -396,9 +428,16 @@ export function ClaimBurn({
       )}
 
       {/* Amount form */}
-      <form onSubmit={handleRequestSubmit} data-testid="claim-burn-form" aria-label={`${mode === 'claim' ? 'Claim' : 'Burn'} tokens`}>
+      <form
+        onSubmit={handleRequestSubmit}
+        data-testid="claim-burn-form"
+        aria-label={`${mode === 'claim' ? 'Claim' : 'Burn'} tokens`}
+      >
         <div className="mb-1 flex flex-col gap-1.5">
-          <label htmlFor="amount-input" className="dark:text-slate-300 text-sm font-medium text-slate-700">
+          <label
+            htmlFor="amount-input"
+            className="dark:text-slate-300 text-sm font-medium text-slate-700"
+          >
             Amount ({tokenSymbol})
           </label>
           <div className="flex gap-2">
@@ -447,19 +486,32 @@ export function ClaimBurn({
             aria-busy={isPending}
             aria-label={`${mode === 'claim' ? 'Claim' : 'Burn'} tokens`}
           >
-            {isPending ? (mode === 'claim' ? 'Claiming…' : 'Burning…') : (mode === 'claim' ? 'Claim' : 'Burn')}
+            {isPending
+              ? mode === 'claim'
+                ? 'Claiming…'
+                : 'Burning…'
+              : mode === 'claim'
+                ? 'Claim'
+                : 'Burn'}
           </button>
         )}
       </form>
 
       {/* Feedback */}
       {status === 'success' && (
-        <p className="dark:border-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-400 mt-4 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-center text-sm font-medium text-emerald-800" role="status" data-testid="success-msg">
+        <p
+          className="dark:border-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-400 mt-4 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-center text-sm font-medium text-emerald-800"
+          role="status"
+          data-testid="success-msg"
+        >
           {mode === 'claim'
             ? `${tokenSymbol} claimed successfully!`
             : `${tokenSymbol} burned successfully!`}
           {txHash && (
-            <span className="dark:text-violet-400 mt-2 block break-all font-mono text-xs text-violet-600" data-testid="tx-hash">
+            <span
+              className="dark:text-violet-400 mt-2 block break-all font-mono text-xs text-violet-600"
+              data-testid="tx-hash"
+            >
               {txHash.slice(0, 8)}…{txHash.slice(-8)}
             </span>
           )}

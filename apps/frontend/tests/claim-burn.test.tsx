@@ -23,12 +23,7 @@ describe('ClaimBurn — wallet states', () => {
 
   it('calls onConnect when connect button clicked', () => {
     const onConnect = vi.fn();
-    renderWithProviders(
-      <ClaimBurn
-        walletState="disconnected"
-        onConnect={onConnect}
-      />,
-    );
+    renderWithProviders(<ClaimBurn walletState="disconnected" onConnect={onConnect} />);
     fireEvent.click(screen.getByTestId('connect-wallet-btn'));
     expect(onConnect).toHaveBeenCalledOnce();
   });
@@ -259,7 +254,10 @@ describe('ClaimBurn — accessibility', () => {
     fireEvent.click(screen.getByTestId('submit-btn'));
     fireEvent.click(screen.getByTestId('confirm-btn'));
     await waitFor(() => expect(screen.getByTestId('error-msg')).toBeInTheDocument());
-    expect(screen.getByTestId('amount-input')).toHaveAttribute('aria-describedby', 'claim-burn-error');
+    expect(screen.getByTestId('amount-input')).toHaveAttribute(
+      'aria-describedby',
+      'claim-burn-error',
+    );
   });
 
   it('confirm overlay has dialog role and aria-modal', () => {

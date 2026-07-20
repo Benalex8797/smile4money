@@ -17,7 +17,7 @@ interface NetworkBadgeProps {
 }
 
 export function NetworkBadge({ network }: NetworkBadgeProps) {
-  const net = network ?? (import.meta.env.VITE_STELLAR_NETWORK ?? 'testnet');
+  const net = network ?? import.meta.env.VITE_STELLAR_NETWORK ?? 'testnet';
   const label = NETWORK_LABELS[net] ?? net;
   const color = NETWORK_COLORS[net] ?? 'bg-gray-400';
 

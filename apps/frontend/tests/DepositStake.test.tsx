@@ -31,7 +31,9 @@ describe('DepositStake — loading state', () => {
 
 describe('DepositStake — no match ID', () => {
   it('returns null when no match ID provided', () => {
-    const { container } = render(<DepositStake matchId="" playerAddress="GABCDEF123456" contractId="test-contract" />);
+    const { container } = render(
+      <DepositStake matchId="" playerAddress="GABCDEF123456" contractId="test-contract" />,
+    );
     expect(container.firstChild).toBeNull();
   });
 });
@@ -39,7 +41,7 @@ describe('DepositStake — no match ID', () => {
 describe('DepositStake — match info display', () => {
   it('displays match stake amount after mock data loads', async () => {
     render(<DepositStake matchId="123" playerAddress="GABCDEF123456" contractId="test-contract" />);
-    
+
     // Wait for the mock data to be loaded
     await waitFor(() => {
       expect(screen.getByTestId('match-info')).toBeInTheDocument();
@@ -50,7 +52,7 @@ describe('DepositStake — match info display', () => {
 describe('DepositStake — deposit button states', () => {
   it('shows Deposit Stake button after loading', async () => {
     render(<DepositStake matchId="123" playerAddress="GABCDEF123456" contractId="test-contract" />);
-    
+
     await waitFor(() => {
       expect(screen.getByTestId('deposit-btn')).toBeInTheDocument();
     });

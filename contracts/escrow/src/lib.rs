@@ -312,7 +312,6 @@ impl EscrowContract {
             pending_winner: OptionalWinner::None,
             cancelled_ledger: None,
             completed_ledger: None,
-            cancelled_ledger: None,
         };
 
         env.storage().persistent().set(&DataKey::Match(id), &m);

@@ -1,12 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 
 export type WalletState =
-  | 'checking'
-  | 'notInstalled'
-  | 'disconnected'
-  | 'connecting'
-  | 'connected'
-  | 'wrongNetwork';
+  'checking' | 'notInstalled' | 'disconnected' | 'connecting' | 'connected' | 'wrongNetwork';
 
 declare global {
   interface Window {

@@ -2,8 +2,7 @@ import React from 'react';
 
 const EXPECTED_NETWORK =
   (typeof import.meta !== 'undefined' &&
-    (import.meta as { env?: { VITE_STELLAR_NETWORK?: string } }).env
-      ?.VITE_STELLAR_NETWORK) ||
+    (import.meta as { env?: { VITE_STELLAR_NETWORK?: string } }).env?.VITE_STELLAR_NETWORK) ||
   'testnet';
 
 interface NetworkBannerProps {
@@ -21,9 +20,8 @@ export function NetworkBanner({ walletNetwork }: NetworkBannerProps) {
       data-testid="network-banner"
       className="w-full bg-red-600 px-4 py-3 text-center text-sm font-medium text-white"
     >
-      Wrong network detected: your wallet is on{' '}
-      <strong>{walletNetwork}</strong> but this app requires{' '}
-      <strong>{EXPECTED_NETWORK}</strong>.{' '}
+      Wrong network detected: your wallet is on <strong>{walletNetwork}</strong> but this app
+      requires <strong>{EXPECTED_NETWORK}</strong>.{' '}
       <a
         href="https://www.freighter.app/"
         target="_blank"

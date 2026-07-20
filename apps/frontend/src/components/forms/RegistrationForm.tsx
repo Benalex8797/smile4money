@@ -13,7 +13,8 @@ function validateFields({ email, password, confirmPassword }: Fields): Errors {
   else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) errs.email = 'Invalid email address';
   if (!password) errs.password = 'Password is required';
   else if (password.length < 8) errs.password = 'Password must be at least 8 characters';
-  else if (!/(?=.*[A-Z])(?=.*\d)/.test(password)) errs.password = 'Password must contain uppercase and a number';
+  else if (!/(?=.*[A-Z])(?=.*\d)/.test(password))
+    errs.password = 'Password must contain uppercase and a number';
   if (password && confirmPassword && password !== confirmPassword)
     errs.confirmPassword = 'Passwords do not match';
   return errs;

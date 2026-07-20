@@ -77,7 +77,8 @@ export function History({ walletState, publicKey }: HistoryProps) {
         setHistory(
           records.map((record) => {
             const matchId = record.memo && !Number.isNaN(Number(record.memo)) ? record.memo : '—';
-            const opponent = record.source_account === publicKey ? 'Unknown' : record.source_account;
+            const opponent =
+              record.source_account === publicKey ? 'Unknown' : record.source_account;
             const stake = record.fee_charged ? `${record.fee_charged} stroops` : '—';
             const result = record.successful ? 'Success' : 'Failed';
             const payout = record.successful ? 'Confirmed' : 'Failed';

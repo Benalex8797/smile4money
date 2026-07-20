@@ -104,7 +104,10 @@ export function CreateMatch({
     }
   }
 
-  function validateAndUpdate(key: 'player2' | 'stakeAmount' | 'gameId' | 'platform', value: string) {
+  function validateAndUpdate(
+    key: 'player2' | 'stakeAmount' | 'gameId' | 'platform',
+    value: string,
+  ) {
     const next = { ...formData, [key]: value } as FormData;
     setFormData(next);
     const validationErrors = validateForm(next);
@@ -148,9 +151,7 @@ export function CreateMatch({
         }
       } catch (err) {
         setStatus('error');
-        setErrorMsg(
-          err instanceof Error ? err.message : 'Failed to create match',
-        );
+        setErrorMsg(err instanceof Error ? err.message : 'Failed to create match');
       }
     },
     [formData, player1Address, token, onCreateMatch],

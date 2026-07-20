@@ -42,9 +42,9 @@ describe('MatchStatus — no match ID', () => {
 describe('MatchStatus — match not found', () => {
   it('shows error when match not found (onFetchMatch returns null)', async () => {
     const onFetchMatch = vi.fn().mockResolvedValue(null);
-    
+
     render(<MatchStatus matchId="invalid" onFetchMatch={onFetchMatch} />);
-    
+
     await waitFor(() => {
       expect(screen.getByTestId('match-not-found')).toBeInTheDocument();
     });
@@ -63,9 +63,9 @@ describe('MatchStatus — state rendering with match data', () => {
       platform: 'lichess',
       gameId: 'game-abc',
     });
-    
+
     render(<MatchStatus matchId="123" onFetchMatch={onFetchMatch} />);
-    
+
     await waitFor(() => {
       expect(screen.getByTestId('state-pending')).toBeInTheDocument();
     });
@@ -82,9 +82,9 @@ describe('MatchStatus — state rendering with match data', () => {
       platform: 'lichess',
       gameId: 'game-abc',
     });
-    
+
     render(<MatchStatus matchId="123" onFetchMatch={onFetchMatch} />);
-    
+
     await waitFor(() => {
       expect(screen.getByTestId('state-active')).toBeInTheDocument();
     });
@@ -102,9 +102,9 @@ describe('MatchStatus — state rendering with match data', () => {
       gameId: 'game-abc',
       winner: 'Player1',
     });
-    
+
     render(<MatchStatus matchId="123" onFetchMatch={onFetchMatch} />);
-    
+
     await waitFor(() => {
       expect(screen.getByTestId('state-completed')).toBeInTheDocument();
     });
@@ -121,9 +121,9 @@ describe('MatchStatus — state rendering with match data', () => {
       platform: 'lichess',
       gameId: 'game-abc',
     });
-    
+
     render(<MatchStatus matchId="123" onFetchMatch={onFetchMatch} />);
-    
+
     await waitFor(() => {
       expect(screen.getByTestId('state-cancelled')).toBeInTheDocument();
     });

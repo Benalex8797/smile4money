@@ -54,9 +54,7 @@ export function MatchStatus({
       setFetchStatus('idle');
     } catch (err) {
       setFetchStatus('error');
-      setErrorMessage(
-        err instanceof Error ? err.message : 'Failed to fetch match status',
-      );
+      setErrorMessage(err instanceof Error ? err.message : 'Failed to fetch match status');
     }
   }, [matchId, onFetchMatch]);
 
@@ -133,9 +131,7 @@ export function MatchStatus({
         return (
           <div className="state-content pending" data-testid="state-pending">
             <h3 className="state-title">Pending</h3>
-            <p className="state-description">
-              Waiting for both players to deposit their stakes.
-            </p>
+            <p className="state-description">Waiting for both players to deposit their stakes.</p>
             <div className="deposit-status" data-testid="deposit-status">
               <span>
                 Player 1: {p1Deposited}{' '}
@@ -164,7 +160,8 @@ export function MatchStatus({
           <div className="state-content active" data-testid="state-active">
             <h3 className="state-title">Active</h3>
             <p className="state-description">
-              Game is in progress on {matchData.platform === 'lichess' ? 'Lichess' : 'Chess.com'}. Game ID: {matchData.gameId}
+              Game is in progress on {matchData.platform === 'lichess' ? 'Lichess' : 'Chess.com'}.
+              Game ID: {matchData.gameId}
             </p>
             <p className="waiting-oracle">Waiting for oracle to submit result…</p>
           </div>
@@ -179,7 +176,14 @@ export function MatchStatus({
             </p>
             {matchData.winner && (
               <p className="winner-info">
-                Reported winner: <strong>{matchData.winner === 'Player1' ? 'Player 1' : matchData.winner === 'Player2' ? 'Player 2' : 'Draw'}</strong>
+                Reported winner:{' '}
+                <strong>
+                  {matchData.winner === 'Player1'
+                    ? 'Player 1'
+                    : matchData.winner === 'Player2'
+                      ? 'Player 2'
+                      : 'Draw'}
+                </strong>
               </p>
             )}
           </div>

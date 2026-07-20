@@ -272,13 +272,6 @@ pub struct Match {
     /// [`finalize_result`](crate::EscrowContract::finalize_result) when the match
     /// transitions to [`MatchState::Completed`]. `None` for all other states.
     pub completed_ledger: Option<u32>,
-
-    /// The ledger sequence number at which this match was cancelled.
-    ///
-    /// Set to `Some(env.ledger().sequence())` by
-    /// [`cancel_match`](crate::EscrowContract::cancel_match) when the match
-    /// transitions to [`MatchState::Cancelled`]. `None` for all other states.
-    pub cancelled_ledger: Option<u32>,
 }
 
 /// Storage keys used by the escrow contract.

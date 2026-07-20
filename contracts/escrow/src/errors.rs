@@ -33,6 +33,9 @@ use soroban_sdk::contracterror;
 /// | 20   | DisputeWindowActive   | finalize_result called before the dispute window has expired |
 /// | 21   | MatchTimedOut         | match has already timed out; use claim_timeout to reclaim funds |
 /// | 22   | InvalidToken          | the provided token address does not match the initialized token |
+/// | 23   | InvalidAdmin          | the new admin address is invalid (zero address or same as current admin) |
+/// | 24   | StakeTooLow           | stake_amount is below the minimum allowed stake |
+/// | 25   | StakeTooHigh          | stake_amount exceeds the maximum allowed stake |
 #[contracterror]
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum Error {
@@ -111,4 +114,13 @@ pub enum Error {
     /// [E022] The provided token address does not match the token set during `initialize`.
     /// `create_match` requires the token to match the contract's configured token.
     InvalidToken = 22,
+
+    /// [E023] The new admin address is invalid (e.g. zero address or same as current admin).
+    InvalidAdmin = 23,
+
+    /// [E024] `stake_amount` is below the minimum allowed stake (`MIN_STAKE`).
+    StakeTooLow = 24,
+
+    /// [E025] `stake_amount` exceeds the maximum allowed stake (`MAX_STAKE`).
+    StakeTooHigh = 25,
 }

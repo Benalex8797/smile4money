@@ -65,29 +65,31 @@ describe('CreateMatch — platform toggle', () => {
 describe('CreateMatch — form interaction', () => {
   it('allows user to type in player2 address field', () => {
     render(<CreateMatch contractId="test-contract" player1Address={validAddress} />);
-    
+
     const input = screen.getByTestId('player2-input');
-    fireEvent.change(input, { target: { value: 'GTESTADDRESS123456789012345678901234567890TEST' } });
-    
+    fireEvent.change(input, {
+      target: { value: 'GTESTADDRESS123456789012345678901234567890TEST' },
+    });
+
     expect(input).toHaveValue('GTESTADDRESS123456789012345678901234567890TEST');
   });
 
-it('allows user to type in stake amount field', () => {
+  it('allows user to type in stake amount field', () => {
     render(<CreateMatch contractId="test-contract" player1Address={validAddress} />);
-    
+
     const input = screen.getByTestId('stake-amount-input');
     fireEvent.change(input, { target: { value: '100' } });
-    
+
     // The value should be '100' as a string
     expect((input as HTMLInputElement).value).toBe('100');
   });
 
   it('allows user to type in game ID field', () => {
     render(<CreateMatch contractId="test-contract" player1Address={validAddress} />);
-    
+
     const input = screen.getByTestId('game-id-input');
     fireEvent.change(input, { target: { value: 'game-abc123' } });
-    
+
     expect(input).toHaveValue('game-abc123');
   });
 });

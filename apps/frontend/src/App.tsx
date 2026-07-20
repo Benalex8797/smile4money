@@ -6,7 +6,8 @@ import { useTheme } from './hooks/useTheme';
 import type { WalletStatus } from './types';
 
 export function App() {
-  const { status, address, balance, network, connect, disconnect, refreshBalance } = useStellarWallet();
+  const { status, address, balance, network, connect, disconnect, refreshBalance } =
+    useStellarWallet();
   const { theme, toggle } = useTheme();
 
   const walletState = (
@@ -31,7 +32,7 @@ export function App() {
     // 4. Poll for confirmation
     // For implementation, see the contract call documentation:
     // https://stellar-sdk.js.org/docs/server#sendtransaction
-    
+
     // Sign transaction using Freighter wallet
     if (!window.freighterApi?.signTransaction) {
       throw new Error('Freighter wallet does not support signTransaction');
@@ -41,7 +42,9 @@ export function App() {
     // const transactionXdr = buildClaimTransaction(amount, address, networkPassphrase);
     const mockTxXdr = 'AAAA...'; // Placeholder
 
-    const { signedTxXdr } = await window.freighterApi.signTransaction(mockTxXdr, { networkPassphrase });
+    const { signedTxXdr } = await window.freighterApi.signTransaction(mockTxXdr, {
+      networkPassphrase,
+    });
     return signAndSubmitTransaction(signedTxXdr, server);
   };
 
@@ -80,7 +83,9 @@ export function App() {
     // const transactionXdr = buildCreateMatchTransaction(data, address, networkPassphrase);
     const mockTxXdr = 'AAAA...';
 
-    const { signedTxXdr } = await window.freighterApi.signTransaction(mockTxXdr, { networkPassphrase });
+    const { signedTxXdr } = await window.freighterApi.signTransaction(mockTxXdr, {
+      networkPassphrase,
+    });
     await signAndSubmitTransaction(signedTxXdr, server);
     return '1'; // Placeholder match ID
   };
@@ -103,7 +108,9 @@ export function App() {
     // In a real implementation, build transaction XDR here
     const mockTxXdr = 'AAAA...';
 
-    const { signedTxXdr } = await window.freighterApi.signTransaction(mockTxXdr, { networkPassphrase });
+    const { signedTxXdr } = await window.freighterApi.signTransaction(mockTxXdr, {
+      networkPassphrase,
+    });
     await signAndSubmitTransaction(signedTxXdr, server);
   };
 

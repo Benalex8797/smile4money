@@ -58,9 +58,7 @@ export function DepositStake({
       setStatus('idle');
     } catch (err) {
       setStatus('error');
-      setErrorMsg(
-        err instanceof Error ? err.message : 'Failed to fetch match details',
-      );
+      setErrorMsg(err instanceof Error ? err.message : 'Failed to fetch match details');
     }
   }, [matchId, contractId]);
 
@@ -80,9 +78,7 @@ export function DepositStake({
       setStatus('success');
     } catch (err) {
       setStatus('error');
-      setErrorMsg(
-        err instanceof Error ? err.message : 'Deposit transaction failed',
-      );
+      setErrorMsg(err instanceof Error ? err.message : 'Deposit transaction failed');
     }
   }, [matchId, onDeposit]);
 
@@ -139,7 +135,10 @@ export function DepositStake({
             <span className="address">
               {matchDetails.player1.slice(0, 4)}...{matchDetails.player1.slice(-4)}
             </span>
-            <span className={`status-indicator ${matchDetails.player1Deposited ? 'deposited' : 'pending'}`} data-testid="player1-status">
+            <span
+              className={`status-indicator ${matchDetails.player1Deposited ? 'deposited' : 'pending'}`}
+              data-testid="player1-status"
+            >
               {matchDetails.player1Deposited ? '✓ Deposited' : 'Pending'}
             </span>
           </p>
@@ -148,7 +147,10 @@ export function DepositStake({
             <span className="address">
               {matchDetails.player2.slice(0, 4)}...{matchDetails.player2.slice(-4)}
             </span>
-            <span className={`status-indicator ${matchDetails.player2Deposited ? 'deposited' : 'pending'}`} data-testid="player2-status">
+            <span
+              className={`status-indicator ${matchDetails.player2Deposited ? 'deposited' : 'pending'}`}
+              data-testid="player2-status"
+            >
               {matchDetails.player2Deposited ? '✓ Deposited' : 'Pending'}
             </span>
           </p>
@@ -163,7 +165,11 @@ export function DepositStake({
         data-testid="deposit-btn"
         aria-busy={isPending}
       >
-        {isPending ? 'Depositing…' : hasDeposited(matchDetails) ? 'Already Deposited' : 'Deposit Stake'}
+        {isPending
+          ? 'Depositing…'
+          : hasDeposited(matchDetails)
+            ? 'Already Deposited'
+            : 'Deposit Stake'}
       </button>
 
       {/* Success */}
@@ -179,7 +185,7 @@ export function DepositStake({
       )}
 
       {/* Error */}
-      {(status === 'error' && matchDetails) && (
+      {status === 'error' && matchDetails && (
         <p className="feedback error" role="alert" data-testid="deposit-error-msg">
           {errorMsg}
         </p>

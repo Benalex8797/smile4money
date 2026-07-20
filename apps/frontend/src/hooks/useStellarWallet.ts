@@ -1,7 +1,10 @@
 import { useState, useCallback, useEffect } from 'react';
 import type { WalletStatus, Network } from '../types';
 
-const EXPECTED_NETWORK = (typeof import.meta !== 'undefined' && (import.meta as { env?: { VITE_STELLAR_NETWORK?: string } }).env?.VITE_STELLAR_NETWORK) || 'testnet';
+const EXPECTED_NETWORK =
+  (typeof import.meta !== 'undefined' &&
+    (import.meta as { env?: { VITE_STELLAR_NETWORK?: string } }).env?.VITE_STELLAR_NETWORK) ||
+  'testnet';
 
 declare global {
   interface Window {
@@ -42,17 +45,12 @@ function detectNetwork(networkPassphrase?: string): Network {
   return 'unknown';
 }
 
-async function fetchHorizonBalance(
-  address: string,
-  network: Network,
-): Promise<string> {
+async function fetchHorizonBalance(address: string, network: Network): Promise<string> {
   const horizon = HORIZON_URLS[network] || HORIZON_URLS.unknown;
   const res = await fetch(`${horizon}/accounts/${address}`);
   if (!res.ok) throw new Error('Failed to fetch balance');
   const data = await res.json();
-  const native = data.balances.find(
-    (b: { asset_type: string }) => b.asset_type === 'native',
-  );
+  const native = data.balances.find((b: { asset_type: string }) => b.asset_type === 'native');
   return native ? native.balance : '0';
 }
 
@@ -63,8 +61,7 @@ export function useStellarWallet(): StellarWallet {
   const [balance, setBalance] = useState<string | null>(null);
   const [network, setNetwork] = useState<Network>('unknown');
 
-  const freighter =
-    typeof window !== 'undefined' ? window.freighterApi : undefined;
+  const freighter = typeof window !== 'undefined' ? window.freighterApi : undefined;
   const isInstalled = !!freighter;
 
   useEffect(() => {
@@ -122,11 +119,7 @@ export function useStellarWallet(): StellarWallet {
         .catch(() => setBalance(null));
     } catch (err) {
       setStatus('error');
-      setError(
-        err instanceof Error
-          ? err.message
-          : 'Failed to connect to Freighter wallet',
-      );
+      setError(err instanceof Error ? err.message : 'Failed to connect to Freighter wallet');
     }
   }, [freighter]);
 
